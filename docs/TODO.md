@@ -11,26 +11,26 @@
   - [x] 创建 `docs/API.md`
   - [x] 创建 `.env.example`
   - [x] 创建 `.gitignore`
-- [ ] 0.2 初始化 Git
+- [x] 0.2 初始化 Git
   - [x] 检查是否已有 git 仓库
   - [x] 如果没有，执行 `git init`
-  - [ ] 完成第一次 commit
-- [ ] 0.3 检查 GitHub remote
+  - [x] 完成第一次 commit
+- [x] 0.3 检查 GitHub remote
   - [x] 执行 `git remote -v`
   - [x] 如果没有 remote，暂停并要求用户提供 GitHub 仓库地址
-  - [ ] 如果有 remote，确认可以 push
+  - [x] 如果有 remote，确认可以 push
 - [x] 0.4 写入项目规则
   - [x] 在 `PROJECT_MEMORY.md` 中记录“每次只做一个环节”
   - [x] 在 `PROJECT_MEMORY.md` 中记录“完成后必须 commit 和 push”
   - [x] 在 `PROJECT_MEMORY.md` 中记录“等待用户确认后再进入下一环节”
-- [ ] 0.5 阶段 0 完成后执行
+- [x] 0.5 阶段 0 完成后执行
   - [x] 自测项目目录完整
   - [x] 更新 `PROJECT_MEMORY.md`
   - [x] 更新本 TODO 勾选状态
-  - [ ] `git add .`
-  - [ ] `git commit -m "chore: 初始化项目结构和开发规则"`
-  - [ ] `git push`
-  - [ ] 停止，等待用户确认
+  - [x] `git add .`
+  - [x] `git commit -m "chore: 初始化项目结构和开发规则"`
+  - [x] `git push`
+  - [x] 停止，等待用户确认
 
 ## 阶段 1：搭建前后端基础骨架
 

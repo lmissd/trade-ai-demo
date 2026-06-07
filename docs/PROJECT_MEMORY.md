@@ -2,10 +2,11 @@
 
 ## 当前已完成
 
-- 已完成阶段 0 的本地初始化与规则固化，GitHub push 待网络或认证问题解除后完成。
+- 已完成阶段 0：项目初始化与规则固化。
 - 已补齐基础目录结构：`apps/`、`apps/web/`、`apps/server/`、`uploads/`、`generated_qr/`。
 - 已补齐基础项目文件：`docs/PROJECT_MEMORY.md`、`docs/API.md`、`.env.example`、`.gitignore`。
 - 已确认默认演示场景为中国采购 100 箱货发往赞比亚仓库，但该场景只作为默认值，后续实现必须支持配置或表单修改。
+- 已完成 Git 初始化、本地提交、GitHub SSH 连通验证与远端推送。
 
 ## 关键技术选择
 
@@ -43,21 +44,20 @@
 - 目录结构已创建完成。
 - 阶段 0 所需基础文件已补齐。
 - 本地 Git 已初始化，当前分支为 `main`。
-- GitHub remote 已配置为 `https://github.com/lmissd/trade-ai-demo.git`。
-- 远端推送预检未通过：当前环境无法正常连接 `github.com:443`，`ssh.github.com:443` 可连通，但本机没有可用 SSH key。
+- GitHub remote 当前已配置为 `git@github.com:lmissd/trade-ai-demo.git`。
+- SSH 认证已通过，返回 `Hi lmissd! You've successfully authenticated`。
+- `origin/main` 已成功关联并确认包含当前提交 `6b88212a43184e79a0f543b82abceabd3cfac562`。
 
 ## 遇到的问题
 
 - 当前工作目录最开始不是 Git 仓库，也没有 `docs/PROJECT_MEMORY.md`，已在本阶段补齐并初始化。
-- 当前环境无法通过 HTTPS 访问 `github.com:443`。
-- 当前环境虽然可以连通 `ssh.github.com:443`，但本机没有可用 SSH 私钥或 agent，因此还不能通过 SSH 推送到 GitHub。
+- 初次尝试时 HTTPS 推送失败，后续通过 SSH key 配置恢复了 GitHub 推送能力。
 
 ## 下一步要做什么
 
-- 先解决 GitHub 推送问题，完成阶段 0 的远端推送收尾。
-- 推送完成并获得用户确认后，再进入阶段 1：搭建前后端基础骨架。
+- 等待用户确认后，再进入阶段 1：搭建前后端基础骨架。
 
 ## 本次 Git 提交
 
-- 计划提交信息：`chore: 初始化项目结构和开发规则`
-- 本次 git commit hash：以本阶段提交结果为准，最终 hash 在本次汇报中同步给出。
+- 阶段 0 初始化提交：`chore: 初始化项目结构和开发规则`
+- 已推送提交 hash：`6b88212a43184e79a0f543b82abceabd3cfac562`
