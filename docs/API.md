@@ -1,35 +1,60 @@
 # API 规划（第一版）
 
-本文档用于记录第一版 Demo 计划中的接口草案。当前阶段只固化接口范围，不实现业务逻辑。
+本文档记录当前已经实现和后续计划中的接口范围。
 
 ## 设计原则
 
 - AI 不能直接写数据库。
 - 所有写入必须经过后端接口和用户确认。
-- 默认演示值可以来自配置，但接口不能把 `100 / 20 / 80 / Zambia Warehouse` 写死在业务逻辑里。
-- 库存相关返回值必须来自真实二维码状态统计。
+- 默认演示值可以来自配置或 `DemoConfig`，但业务逻辑不能把 `100 / 20 / 80 / Zambia Warehouse` 写死。
+- 库存相关统计最终必须来自真实二维码状态。
 
-## 单据接口
+## 已实现接口
 
-### `POST /api/documents/upload`
+### `GET /api/health`
 
-- 用途：上传合同、箱单等单据。
+- 用途：检查后端服务是否正常运行。
+
+### `GET /api/setup/status`
+
+- 用途：检查数据库连通、核心表数量、默认 demo 用户和当前演示场景配置。
 
 ### `GET /api/documents`
 
 - 用途：查询已上传单据列表。
 
+### `POST /api/documents/upload`
+
+- 用途：上传合同、箱单、提单、发票等单据。
+- 表单字段：
+  - `documentType`
+  - `file`
+
 ### `POST /api/documents/:id/extract`
 
-- 用途：触发 AI 或 mock 识别。
-- 说明：第一版允许返回默认 mock 数据，但默认值应来自统一的演示场景配置。
+- 用途：触发 AI Mock 识别。
+- 说明：第一版识别结果来自后端 `DemoConfig`，并写入 `Document.extractedJson` 与 `AiLog`。
+
+### `PATCH /api/documents/:id/extracted-fields`
+
+- 用途：保存人工修正后的识别字段。
+- 支持字段：
+  - `contractNoDraft`
+  - `batchNoDraft`
+  - `productName`
+  - `customerName`
+  - `supplierName`
+  - `destinationWarehouse`
+  - `totalQuantity`
+  - `unit`
+  - `amount`
+  - `currency`
+
+## 阶段 4 计划接口
 
 ### `POST /api/documents/:id/confirm`
 
-- 用途：用户确认识别结果后生成合同与批次草稿。
-- 说明：应接收用户确认后的商品、客户、供应商、仓库、数量、单位、金额、币种等字段。
-
-## 合同接口
+- 用途：用户确认识别结果后，生成合同与批次。
 
 ### `GET /api/contracts`
 
@@ -47,8 +72,6 @@
 
 - 用途：更新合同信息。
 
-## 批次接口
-
 ### `GET /api/batches`
 
 - 用途：查询批次列表。
@@ -61,12 +84,11 @@
 
 - 用途：查询批次详情。
 
+## 阶段 5 计划接口
+
 ### `POST /api/batches/:id/generate-qr`
 
 - 用途：按批次数量生成二维码货物。
-- 说明：二维码数量必须等于当前批次确认后的数量。
-
-## 二维码接口
 
 ### `GET /api/qr-items`
 
@@ -74,47 +96,25 @@
 
 ### `GET /api/qr-items/:qrCode`
 
-- 用途：查询单个二维码货物详情。
+- 用途：查询单个二维码详情。
 
 ### `GET /api/qr-items/:qrCode/image`
 
 - 用途：返回二维码图片。
 
-## 扫码接口
+## 阶段 6-8 计划接口
 
 ### `POST /api/scan/inbound`
 
 - 用途：扫码入库。
 
-请求示例：
-
-```json
-{
-  "qrCode": "QR202606070001",
-  "operatorName": "demo-user",
-  "warehouse": "Zambia Warehouse"
-}
-```
-
 ### `POST /api/scan/outbound`
 
 - 用途：扫码出库。
 
-请求示例：
-
-```json
-{
-  "qrCode": "QR202606070001",
-  "operatorName": "demo-user",
-  "warehouse": "Zambia Warehouse"
-}
-```
-
 ### `GET /api/stock-movements`
 
 - 用途：查询库存流水。
-
-## 库存接口
 
 ### `GET /api/inventory/summary`
 
@@ -128,23 +128,9 @@
 
 - 用途：按合同查询库存。
 
-## 回款接口
-
-### `GET /api/payments`
-
-- 用途：查询回款记录。
-
-### `POST /api/payments`
-
-- 用途：新建回款记录。
-
-### `PATCH /api/payments/:id`
-
-- 用途：更新回款状态。
-
-## AI 问答接口
+## 阶段 9 计划接口
 
 ### `POST /api/ai/ask`
 
-- 用途：根据真实库存、合同、回款数据生成问答结果。
-- 说明：AI 回答必须基于后端受控查询结果，不能直接访问数据库，也不能把“剩余 80 箱”写死。
+- 用途：根据真实库存、合同、回款等受控查询结果生成 AI 问答。
+- 说明：AI 不直接访问数据库，只基于后端受控查询结果组织自然语言回答。

@@ -61,7 +61,7 @@ export function FeaturePlaceholder({
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
           <div>
             <Typography.Title level={4} style={{ marginTop: 0 }}>
-              当前阶段包含
+              当前页面包含
             </Typography.Title>
             <ol className="placeholder-list">
               {bullets.map((bullet) => (

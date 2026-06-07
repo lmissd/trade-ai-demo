@@ -46,12 +46,12 @@ export function AppLayout() {
           </div>
 
           <div className="app-header-panel">
-            <span className="app-header-panel-label">新版阶段 1 骨架</span>
-            <span className="app-header-panel-value">14 项 ERP 菜单 + 双击 BAT 预览保留</span>
+            <span className="app-header-panel-label">当前演示版本</span>
+            <span className="app-header-panel-value">14 项 ERP 菜单已启用，核心真实闭环持续接入</span>
             <Space wrap>
               <Tag color="processing">React + Vite</Tag>
-              <Tag color="success">ERP Menu</Tag>
-              <Tag color="warning">BAT 直开浏览器</Tag>
+              <Tag color="success">SQLite + Prisma</Tag>
+              <Tag color="warning">双击 BAT 预览</Tag>
             </Space>
           </div>
         </Header>

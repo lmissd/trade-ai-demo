@@ -1,14 +1,10 @@
 # 国际贸易 ERP 全链路演示版 Demo TODO
 
-> 使用说明：Codex 每次只允许处理一个大环节。完成后必须先自测、更新本文件和 `docs/PROJECT_MEMORY.md`，然后停下来等待用户验证。未经用户确认，不提交本地 Git，也不推送 GitHub。
+> 规则：Codex 每次只允许处理一个大环节。完成后先自测、更新 `docs/PROJECT_MEMORY.md` 和本文件，再等待用户验证。未经用户确认，不提交当前阶段 Git。
 
 ## 阶段 0：项目初始化与规则固化
 
-- [x] 创建 `docs/PROJECT_DESIGN.md`
-- [x] 创建 `docs/TODO.md`
-- [x] 创建 `docs/PROJECT_MEMORY.md`
-- [x] 创建 `docs/API.md`
-- [x] 创建 `.env.example`
+- [x] 创建基础文档与环境文件
 - [x] 初始化 Git 并确认 GitHub remote
 - [x] 固化“每次只做一个大环节、先验收再提交”的规则
 
@@ -17,7 +13,7 @@
 - [x] 搭建 React + Vite + TypeScript 前端
 - [x] 搭建 Node.js + Express + TypeScript 后端
 - [x] 接入 `/api/health`
-- [x] 搭建 14 个 ERP 菜单入口骨架
+- [x] 搭建 14 项 ERP 菜单入口骨架
 - [x] 保留旧入口兼容跳转
 - [x] 保留 `start-demo.bat` / `stop-demo.bat` 双击查看方式
 
@@ -27,56 +23,63 @@
 
 ### 阶段 2：数据库与成熟 ERP Demo 数据库底座
 
-- [x] 检查当前已存在的 Prisma model
-- [x] 将演示场景配置正式落到 `DemoConfig`
+- [x] 检查当前 Prisma model
+- [x] 将演示场景正式落到 `DemoConfig`
 - [x] 补齐成熟 ERP Demo 所需核心模型
-  - [x] 系统基础与权限：`User` `Role` `Permission` `UserRole` `RolePermission` `Company` `Department`
-  - [x] 基础资料：`Sku` `Customer` `Supplier` `Warehouse` `WarehouseLocation` `Vehicle` `Driver`
-  - [x] 核心闭环：`DemoConfig` `Document` `Contract` `ContractItem` `Batch` `QrItem` `StockMovement` `InventorySnapshot` `StocktakeOrder` `StocktakeItem`
-  - [x] 采购物流清关：`PurchaseOrder` `PurchaseOrderItem` `Shipment` `ShipmentNode` `CustomsClearance`
-  - [x] 仓储销售配送：`PreReceiveOrder` `InboundOrder` `OutboundOrder` `SalesOrder` `SalesOrderItem` `DeliveryOrder` `DeliveryOrderItem`
-  - [x] 财务成本结算：`Payment` `Receivable` `Payable` `Invoice` `CostItem` `ExchangeRate` `BankAccount` `Settlement`
-  - [x] 工单审批审计 AI 报表：`WorkOrder` `Approval` `ApprovalStep` `Notification` `AuditLog` `AiLog` `ReportSnapshot`
 - [x] 执行数据库迁移
 - [x] 生成 Prisma Client
 - [x] 更新 seed
-  - [x] 默认用户 `demo-owner`
-  - [x] 默认 `DemoConfig`
-  - [x] 5 个公司主体
-  - [x] 6 个部门
-  - [x] 示例 SKU / Customer / Supplier / Warehouse / WarehouseLocation
 - [x] 更新 `/api/setup/status`
-  - [x] 返回所有核心表 counts
-  - [x] 返回默认 demo 用户
-  - [x] 返回当前 demo 场景配置
 - [x] 更新 `docs/PROJECT_MEMORY.md`
 - [x] 更新 `docs/TODO.md`
 - [x] 完成阶段 2 自测
-  - [x] `prisma:generate`
-  - [x] `prisma:migrate`
-  - [x] `prisma:seed`
-  - [x] 后端构建
-  - [x] `/api/setup/status` 返回成功
-- [ ] 等待用户验证阶段 2
-- [ ] 用户确认后执行 `git add .`
-- [ ] 用户确认后执行 `git commit -m "feat: 升级阶段2数据库为成熟ERP Demo数据库底座"`
-- [ ] 用户确认后执行 `git push`
+- [x] 等待用户验证阶段 2
+- [x] 用户确认后执行 Git 提交与推送
 
 ### 阶段 3：合同 / 箱单上传与 AI Mock 识别
 
-- [ ] 后端实现文件上传接口
-- [ ] 后端实现 AI Mock 识别接口
-- [ ] 保存 `Document` 与 `AiLog`
-- [ ] 前端完成“合同与单据”上传、识别、人工修正
-- [ ] 自测并更新记忆
-- [ ] 等待用户验证后再提交 Git
+- [x] 后端实现文件上传接口
+  - [x] `POST /api/documents/upload`
+  - [x] `GET /api/documents`
+  - [x] 静态访问已上传原文件
+- [x] 后端实现 AI Mock 识别接口
+  - [x] `POST /api/documents/:id/extract`
+  - [x] 识别结果默认来自 `DemoConfig`
+  - [x] 保存 `Document.extractedJson`
+  - [x] 保存 `AiLog`
+- [x] 后端实现人工修正保存接口
+  - [x] `PATCH /api/documents/:id/extracted-fields`
+- [x] 前端完成“合同与单据”真实工作台
+  - [x] 单据类型切换
+  - [x] 上传合同 / 箱单 / 提单 / 发票
+  - [x] 单据列表
+  - [x] AI Mock 识别按钮
+  - [x] 识别结果展示
+  - [x] 人工修正字段
+  - [x] 保存修正结果
+- [x] 阶段 3 验收补充修复
+  - [x] 修复中文文件名乱码显示
+  - [x] 修复历史草稿 `unit = ?` 的兼容显示与保存逻辑
+- [x] 完成阶段 3 自测
+  - [x] `GET /api/documents`
+  - [x] 上传 -> 识别 -> 保存 -> 回读链路
+  - [x] 中文文件名上传验证
+  - [x] TypeScript 无报错
+- [ ] 等待用户验证阶段 3
+- [ ] 用户确认后执行 `git add .`
+- [ ] 用户确认后执行 `git commit -m "feat: 完成合同单据上传和AI模拟识别"`
+- [ ] 用户确认后执行 `git push`
 
 ### 阶段 4：合同与批次生成
 
-- [ ] 实现合同接口
-- [ ] 实现批次接口
-- [ ] 从识别结果确认生成 `Contract` 与 `Batch`
-- [ ] 前端完成合同与批次列表
+- [ ] 明确“单据识别草稿层”与“正式业务数据层”分离
+- [ ] 增加“确认生成业务数据”操作
+- [ ] 从 `Document.extractedJson` 生成 `Contract`
+- [ ] 生成 `ContractItem`
+- [ ] 生成 `Batch`
+- [ ] 生成 `PurchaseOrder`
+- [ ] 生成 `Payment / Receivable` 草稿
+- [ ] 页面明确提示：此时仍未形成库存
 - [ ] 自测并更新记忆
 - [ ] 等待用户验证后再提交 Git
 
@@ -91,7 +94,7 @@
 ### 阶段 6：仓储扫码入库
 
 - [ ] 实现扫码入库接口
-- [ ] 更新 `QrItem` 状态与 `StockMovement`
+- [ ] 更新 `QrItem.status` 与 `StockMovement`
 - [ ] 前端完成手机网页扫码入库
 - [ ] 提供 Demo 批量入库辅助能力
 - [ ] 自测并更新记忆
@@ -100,7 +103,7 @@
 ### 阶段 7：仓储扫码出库
 
 - [ ] 实现扫码出库接口
-- [ ] 更新 `QrItem` 状态与 `StockMovement`
+- [ ] 更新 `QrItem.status` 与 `StockMovement`
 - [ ] 前端完成手机网页扫码出库
 - [ ] 提供 Demo 批量出库辅助能力
 - [ ] 自测并更新记忆
@@ -111,14 +114,15 @@
 - [ ] 实现库存汇总接口
 - [ ] 实现按合同 / 批次 / 仓库统计
 - [ ] 库存页真实显示实时库存、在途、可用、冻结、已出库
-- [ ] 严格基于 `QrItem` 状态计算，不写死 `80`
+- [ ] 严格基于 `QrItem.status` 与 `StockMovement` 计算库存
+- [ ] 不能把合同数量直接当库存数量
 - [ ] 自测并更新记忆
 - [ ] 等待用户验证后再提交 Git
 
 ### 阶段 9：AI 真实库存问答
 
 - [ ] 实现 AI 问答接口
-- [ ] 先做规则识别，再根据真实库存结果生成回答
+- [ ] 先做规则识别，再基于真实库存结果生成回答
 - [ ] 前端完成“AI 助手”页面
 - [ ] 支持库存、批次、合同、二维码生命周期查询
 - [ ] 自测并更新记忆
@@ -128,7 +132,7 @@
 
 ## Demo 1.5：成熟 ERP 模块包装
 
-### 阶段 10：首页驾驶舱展示增强
+### 阶段 10：首页驾驶舱增强
 
 - [ ] 展示真实库存卡片与 ERP 演示状态卡片
 - [ ] 串联最近工单、最近推进、基础状态
@@ -185,7 +189,7 @@
 
 - [ ] 组织结构展示
 - [ ] 公司职责说明
-- [ ] 标注正式版权限隔离规划
+- [ ] 标注正式版权限隔离规则
 
 ### 阶段 19：自动工单展示模块
 
@@ -203,4 +207,5 @@
 
 ## 当前下一步
 
-- [ ] 下一步进入阶段 3：合同 / 箱单上传与 AI Mock 识别
+- [ ] 继续等待用户验证阶段 3
+- [ ] 用户确认阶段 3 后，再进入 `阶段 4：合同与批次生成`
