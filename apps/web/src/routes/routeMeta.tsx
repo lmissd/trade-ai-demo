@@ -1,15 +1,20 @@
 import type { ItemType } from "antd/es/menu/interface";
 import type { ReactNode } from "react";
 import {
+  ApartmentOutlined,
   AppstoreOutlined,
-  BarsOutlined,
-  DeploymentUnitOutlined,
+  BarChartOutlined,
+  CarOutlined,
   DollarCircleOutlined,
   FileSearchOutlined,
+  GlobalOutlined,
+  InboxOutlined,
   MessageOutlined,
   QrcodeOutlined,
-  RadarChartOutlined,
-  ScanOutlined
+  SafetyCertificateOutlined,
+  ShoppingCartOutlined,
+  ShopOutlined,
+  SolutionOutlined
 } from "@ant-design/icons";
 
 export type RouteMeta = {
@@ -25,53 +30,78 @@ type RouteMenuEntry = {
 
 export const routeMetaByPath: Record<string, RouteMeta> = {
   "/dashboard": {
-    title: "首页看板",
-    subtitle: "汇总合同、批次、库存、回款与最新操作，方便演示时一眼看到全局状态。"
+    title: "首页驾驶舱",
+    subtitle: "先把国际贸易 ERP 的总入口和讲故事主视角搭出来，后续再接入真实库存与经营状态。"
   },
   "/documents": {
-    title: "单据上传",
-    subtitle: "用于上传合同和箱单，并为后续 AI 识别与人工确认预留骨架。"
+    title: "合同与单据",
+    subtitle: "承接合同上传、箱单上传、AI Mock 识别、人工确认，以及后续合同与批次生成。"
   },
-  "/contracts": {
-    title: "合同管理",
-    subtitle: "展示合同列表与详情入口，为后续 AI 识别结果生成合同打基础。"
+  "/procurement": {
+    title: "采购与集货",
+    subtitle: "展示采购下单、供应商发货、国内集货和进入国际运输前的状态推进。"
   },
-  "/batches": {
-    title: "批次管理",
-    subtitle: "管理货物批次、数量、目的仓与二维码生成入口。"
+  "/logistics": {
+    title: "国际物流",
+    subtitle: "展示运输批次、提单、柜号、起运与到港节点，帮助甲方看到完整国际运输链路。"
+  },
+  "/customs": {
+    title: "报关清关",
+    subtitle: "承接清关工单、单据一致性检查和清关完成后的后续任务联动。"
+  },
+  "/warehouse": {
+    title: "仓储管理",
+    subtitle: "后续把预收货、扫码收货、库存管理和销售出库统一收敛到这个核心模块。"
+  },
+  "/sales": {
+    title: "销售与配送",
+    subtitle: "展示销售单、配送状态、签收节点，以及与财务回款状态的联动关系。"
+  },
+  "/finance": {
+    title: "财务回款",
+    subtitle: "展示应收、已收、账期、逾期和核销状态，承接演示版财务闭环。"
+  },
+  "/costs": {
+    title: "成本利润",
+    subtitle: "展示多币种采购、运费、清关费和利润测算，让 Demo 更像成熟 ERP。"
+  },
+  "/companies": {
+    title: "多公司主体",
+    subtitle: "展示境内、香港、新加坡、赞比亚、刚果金等主体分工与组织结构。"
+  },
+  "/work-orders": {
+    title: "自动工单",
+    subtitle: "展示采购、物流、清关、仓储、回款等跨模块任务的自动生成与提醒。"
+  },
+  "/reports": {
+    title: "数据报表",
+    subtitle: "展示采购、在途、库存、销售、回款、成本和利润的演示大盘入口。"
   },
   "/qr-items": {
-    title: "二维码管理",
-    subtitle: "按批次与状态查看二维码货物，为后续追踪和导出做好结构预留。"
-  },
-  "/scan": {
-    title: "手机扫码",
-    subtitle: "为仓库人员预留移动端入库/出库骨架与后续扫码能力接入点。"
-  },
-  "/inventory": {
-    title: "库存查询",
-    subtitle: "将来基于真实二维码状态统计待入库、在库和已出库数量。"
-  },
-  "/payments": {
-    title: "回款记录",
-    subtitle: "记录合同回款状态，为老板视角的经营看板提供数据来源。"
+    title: "二维码追溯",
+    subtitle: "二维码生命周期、状态筛选与批次追溯都将从这里进入，库存统计必须依赖真实状态。"
   },
   "/ai-assistant": {
-    title: "AI 问答",
-    subtitle: "后续通过受控接口查询真实库存与回款数据，不允许写死答案。"
+    title: "AI 助手",
+    subtitle: "老板提问后先走后端受控查询，再基于真实库存结果生成自然语言回答。"
   }
 };
 
 export const routeMenuEntries: RouteMenuEntry[] = [
-  { key: "/dashboard", icon: <AppstoreOutlined />, label: "首页看板" },
-  { key: "/documents", icon: <FileSearchOutlined />, label: "单据上传" },
-  { key: "/contracts", icon: <BarsOutlined />, label: "合同管理" },
-  { key: "/batches", icon: <DeploymentUnitOutlined />, label: "批次管理" },
-  { key: "/qr-items", icon: <QrcodeOutlined />, label: "二维码管理" },
-  { key: "/scan", icon: <ScanOutlined />, label: "手机扫码" },
-  { key: "/inventory", icon: <RadarChartOutlined />, label: "库存查询" },
-  { key: "/payments", icon: <DollarCircleOutlined />, label: "回款记录" },
-  { key: "/ai-assistant", icon: <MessageOutlined />, label: "AI 问答" }
+  { key: "/dashboard", icon: <AppstoreOutlined />, label: "首页驾驶舱" },
+  { key: "/documents", icon: <FileSearchOutlined />, label: "合同与单据" },
+  { key: "/procurement", icon: <ShoppingCartOutlined />, label: "采购与集货" },
+  { key: "/logistics", icon: <GlobalOutlined />, label: "国际物流" },
+  { key: "/customs", icon: <SafetyCertificateOutlined />, label: "报关清关" },
+  { key: "/warehouse", icon: <InboxOutlined />, label: "仓储管理" },
+  { key: "/sales", icon: <CarOutlined />, label: "销售与配送" },
+  { key: "/finance", icon: <DollarCircleOutlined />, label: "财务回款" },
+  { key: "/costs", icon: <BarChartOutlined />, label: "成本利润" },
+  { key: "/companies", icon: <ApartmentOutlined />, label: "多公司主体" },
+  { key: "/work-orders", icon: <SolutionOutlined />, label: "自动工单" },
+  { key: "/reports", icon: <ShopOutlined />, label: "数据报表" },
+  { key: "/qr-items", icon: <QrcodeOutlined />, label: "二维码追溯" },
+  { key: "/ai-assistant", icon: <MessageOutlined />, label: "AI 助手" }
 ];
 
 export const routeMenuItems: ItemType[] = routeMenuEntries;

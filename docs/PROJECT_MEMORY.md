@@ -4,6 +4,7 @@
 
 - 已完成阶段 0：项目初始化与规则固化。
 - 已完成阶段 1：搭建前后端基础骨架。
+- 已按新意见完成“阶段 1 重做”：前端骨架已升级为 14 项 ERP 菜单结构。
 - 已完成本次文档层面的重大设计升级：项目定位从“扫码库存 Demo”升级为“国际贸易 ERP 全链路演示版 Demo”。
 - 已补齐基础目录结构：`apps/`、`apps/web/`、`apps/server/`、`uploads/`、`generated_qr/`。
 - 已补齐基础项目文件：`docs/PROJECT_MEMORY.md`、`docs/API.md`、`.env.example`、`.gitignore`。
@@ -13,6 +14,7 @@
 - 已创建后端 Node.js + Express + TypeScript 骨架，并接通 `/api/health`。
 - 已在根目录建立 workspace 和统一启动脚本，可通过 `npm run dev` 同时启动前后端。
 - 已新增 `start-demo.bat` / `stop-demo.bat` 与对应 PowerShell 脚本，支持双击启动和关闭 Demo。
+- 已保留双击 BAT 直接打开浏览器检阅效果，默认打开 `http://127.0.0.1:5173/dashboard`。
 
 ## 本次重大设计调整
 
@@ -25,6 +27,18 @@
   - Demo 1.0：核心真实闭环。
   - Demo 1.5：成熟 ERP 模块包装。
 - 本次只完成文档与开发计划升级，尚未开始新增 ERP 展示模块业务代码开发。
+
+## 本轮阶段 1 重做内容
+
+- 前端菜单已从旧版 9 个核心页面骨架，升级为新版 14 项 ERP 菜单骨架。
+- 已新增页面入口：`/procurement`、`/logistics`、`/customs`、`/warehouse`、`/sales`、`/finance`、`/costs`、`/companies`、`/work-orders`、`/reports`。
+- 已保留核心入口：`/dashboard`、`/documents`、`/qr-items`、`/ai-assistant`。
+- 已增加旧入口兼容跳转：
+  - `/contracts`、`/batches` -> `/documents`
+  - `/scan`、`/inventory` -> `/warehouse`
+  - `/payments` -> `/finance`
+- 当前这些页面仍为演示骨架，但新版信息架构已经可以直接用于浏览器检阅。
+- 在用户验收过程中已修复左侧深色菜单上的文字对比度问题，现已对菜单文字、图标、hover 与选中态做强制高对比覆盖。
 
 ## 关键技术选择
 
@@ -43,18 +57,6 @@
 
 - `/dashboard`
 - `/documents`
-- `/contracts`
-- `/batches`
-- `/qr-items`
-- `/scan`
-- `/inventory`
-- `/payments`
-- `/ai-assistant`
-
-## 目标菜单结构（待 Demo 1.5 逐步落地）
-
-- `/dashboard`
-- `/documents`
 - `/procurement`
 - `/logistics`
 - `/customs`
@@ -67,6 +69,14 @@
 - `/reports`
 - `/qr-items`
 - `/ai-assistant`
+
+## 兼容旧入口
+
+- `/contracts` -> `/documents`
+- `/batches` -> `/documents`
+- `/scan` -> `/warehouse`
+- `/inventory` -> `/warehouse`
+- `/payments` -> `/finance`
 
 ## 已新增接口
 
@@ -103,10 +113,13 @@
 - 根目录统一构建通过：`npm run build`。
 - 根目录统一启动通过：`npm run dev` 可同时启动前后端。
 - `GET http://127.0.0.1:3001/api/health` 返回 `status: ok`。
-- 前端 9 个占位路由均返回 `200`，包括 `/dashboard`、`/documents`、`/contracts`、`/batches`、`/qr-items`、`/scan`、`/inventory`、`/payments`、`/ai-assistant`。
+- 前端新版菜单路由可访问，包括 `/dashboard`、`/documents`、`/procurement`、`/warehouse`、`/finance` 等新版入口。
+- 通过 Vite 开发服务器返回源码确认，新菜单文案已包含“首页驾驶舱”“采购与集货”“报关清关”“自动工单”等新版 ERP 模块。
+- 左侧菜单样式已重新覆盖，深色背景下的菜单文字与图标不再依赖 Ant Design 默认颜色。
 - `start-demo.bat` 可在服务未启动时拉起前后端，并自动打开 `http://127.0.0.1:5173/dashboard`。
 - 服务已运行时再次执行 `start-demo.bat`，会直接打开页面，不重复报错。
 - `stop-demo.bat` 可关闭 `5173` 与 `3001` 端口对应的 Demo 服务。
+- 本轮已实际执行 `stop-demo -> start-demo` 完整重启，确认新版骨架可通过双击启动链路重新拉起。
 
 ## 遇到的问题
 
@@ -118,7 +131,7 @@
 
 ## 下一步要做什么
 
-- 文档升级完成后，下一步应从 `docs/TODO.md` 的第一个未完成大环节开始。
+- 新版阶段 1 骨架已完成，下一步应从 `docs/TODO.md` 的第一个未完成大环节开始。
 - 当前第一个未完成大环节是：阶段 2“数据库与演示配置基础”。
 - 阶段 2 将先落地 Prisma + SQLite、核心真实数据模型，以及可配置的默认演示场景来源。
 

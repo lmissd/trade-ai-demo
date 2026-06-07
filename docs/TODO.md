@@ -2,7 +2,7 @@
 
 > 使用说明：Codex 每次只允许处理一个大环节。完成后必须先自测、更新本文件和 `docs/PROJECT_MEMORY.md`，再停下来等待用户验证；只有在用户确认满意后，才允许提交 git 和推送 GitHub。
 
-> 说明：阶段 1 的“已完成”内容只记录当前代码已经真实落地的骨架页面；新的 14 项 ERP 菜单结构不在阶段 1 追认，将从 Demo 1.5 的阶段 10 起逐步实现。
+> 说明：阶段 1 已按新意见重做为 14 项 ERP 菜单骨架；后续阶段继续在这个骨架上补真实数据、状态推进和模块联动。
 
 ## 阶段 0：项目初始化与规则固化
 
@@ -48,21 +48,32 @@
 - [x] 1.3 创建统一启动方式
   - [x] 根目录配置 package scripts
   - [x] 支持同时启动前端和后端
-- [x] 1.4 创建核心闭环基础页面占位
+- [x] 1.4 创建新版 ERP 菜单与基础页面占位
   - [x] 首页驾驶舱 `/dashboard`
   - [x] 合同与单据 `/documents`
-  - [x] 合同列表 `/contracts`
-  - [x] 批次列表 `/batches`
+  - [x] 采购与集货 `/procurement`
+  - [x] 国际物流 `/logistics`
+  - [x] 报关清关 `/customs`
+  - [x] 仓储管理 `/warehouse`
+  - [x] 销售与配送 `/sales`
+  - [x] 财务回款 `/finance`
+  - [x] 成本利润 `/costs`
+  - [x] 多公司主体 `/companies`
+  - [x] 自动工单 `/work-orders`
+  - [x] 数据报表 `/reports`
   - [x] 二维码追溯 `/qr-items`
-  - [x] 手机扫码 `/scan`
-  - [x] 库存查询 `/inventory`
-  - [x] 回款记录 `/payments`
   - [x] AI 助手 `/ai-assistant`
-- [x] 1.5 阶段 1 完成后执行
+- [x] 1.5 创建旧入口兼容跳转与双击检阅保留
+  - [x] `/contracts`、`/batches` 兼容跳转到 `/documents`
+  - [x] `/scan`、`/inventory` 兼容跳转到 `/warehouse`
+  - [x] `/payments` 兼容跳转到 `/finance`
+  - [x] 保留 `start-demo.bat` / `stop-demo.bat`
+- [x] 1.6 阶段 1 完成后执行
   - [x] 前端可启动
   - [x] 后端可启动
   - [x] `/api/health` 正常返回
-  - [x] 所有占位页面可以访问
+  - [x] 新版 14 项菜单页面可以访问
+  - [x] 双击启动后默认打开 `/dashboard`
   - [x] 更新 `PROJECT_MEMORY.md`
   - [x] 更新本 TODO 勾选状态
   - [x] `git add .`
@@ -328,33 +339,17 @@
 
 ## Demo 1.5：成熟 ERP 模块包装
 
-### 阶段 10：菜单结构升级与首页驾驶舱
+### 阶段 10：首页驾驶舱展示增强
 
-- [ ] 10.1 菜单结构升级
-  - [ ] 首页驾驶舱 `/dashboard`
-  - [ ] 合同与单据 `/documents`
-  - [ ] 采购与集货 `/procurement`
-  - [ ] 国际物流 `/logistics`
-  - [ ] 报关清关 `/customs`
-  - [ ] 仓储管理 `/warehouse`
-  - [ ] 销售与配送 `/sales`
-  - [ ] 财务回款 `/finance`
-  - [ ] 成本利润 `/costs`
-  - [ ] 多公司主体 `/companies`
-  - [ ] 自动工单 `/work-orders`
-  - [ ] 数据报表 `/reports`
-  - [ ] 二维码追溯 `/qr-items`
-  - [ ] AI 助手 `/ai-assistant`
-- [ ] 10.2 页面结构
+- [ ] 10.1 页面结构
   - [ ] 真实核心数据卡片
   - [ ] ERP 展示状态卡片
   - [ ] 最近工单
   - [ ] 最近业务推进
-- [ ] 10.3 数据来源
+- [ ] 10.2 数据来源
   - [ ] 库存与二维码来自真实统计
   - [ ] 财务、成本、在途可先使用演示数据
-- [ ] 10.4 阶段 10 完成后执行
-  - [ ] 新的 14 项 ERP 菜单结构可访问
+- [ ] 10.3 阶段 10 完成后执行
   - [ ] 首页能体现成熟 ERP 驾驶舱感
   - [ ] 核心真实库存能在首页展示
   - [ ] 更新 `PROJECT_MEMORY.md`
@@ -362,7 +357,7 @@
   - [ ] 停止，等待用户验证
   - [ ] 用户确认满意
   - [ ] `git add .`
-  - [ ] `git commit -m "feat: 完成菜单升级和首页驾驶舱展示"`
+  - [ ] `git commit -m "feat: 完成首页驾驶舱展示增强"`
   - [ ] `git push`
 
 ### 阶段 11：采购与境内集货展示模块

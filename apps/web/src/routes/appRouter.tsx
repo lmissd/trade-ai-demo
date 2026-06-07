@@ -1,14 +1,19 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import App from "../App";
 import { AiAssistantPage } from "../pages/AiAssistantPage";
-import { BatchesPage } from "../pages/BatchesPage";
-import { ContractsPage } from "../pages/ContractsPage";
+import { CompaniesPage } from "../pages/CompaniesPage";
+import { CostsPage } from "../pages/CostsPage";
+import { CustomsPage } from "../pages/CustomsPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { DocumentsPage } from "../pages/DocumentsPage";
-import { InventoryPage } from "../pages/InventoryPage";
-import { PaymentsPage } from "../pages/PaymentsPage";
+import { FinancePage } from "../pages/FinancePage";
+import { LogisticsPage } from "../pages/LogisticsPage";
+import { ProcurementPage } from "../pages/ProcurementPage";
 import { QrItemsPage } from "../pages/QrItemsPage";
-import { ScanPage } from "../pages/ScanPage";
+import { ReportsPage } from "../pages/ReportsPage";
+import { SalesPage } from "../pages/SalesPage";
+import { WarehousePage } from "../pages/WarehousePage";
+import { WorkOrdersPage } from "../pages/WorkOrdersPage";
 
 export const appRouter = createBrowserRouter([
   {
@@ -28,32 +33,72 @@ export const appRouter = createBrowserRouter([
         element: <DocumentsPage />
       },
       {
-        path: "/contracts",
-        element: <ContractsPage />
+        path: "/procurement",
+        element: <ProcurementPage />
       },
       {
-        path: "/batches",
-        element: <BatchesPage />
+        path: "/logistics",
+        element: <LogisticsPage />
+      },
+      {
+        path: "/customs",
+        element: <CustomsPage />
+      },
+      {
+        path: "/warehouse",
+        element: <WarehousePage />
+      },
+      {
+        path: "/sales",
+        element: <SalesPage />
+      },
+      {
+        path: "/finance",
+        element: <FinancePage />
+      },
+      {
+        path: "/costs",
+        element: <CostsPage />
+      },
+      {
+        path: "/companies",
+        element: <CompaniesPage />
+      },
+      {
+        path: "/work-orders",
+        element: <WorkOrdersPage />
+      },
+      {
+        path: "/reports",
+        element: <ReportsPage />
       },
       {
         path: "/qr-items",
         element: <QrItemsPage />
       },
       {
+        path: "/ai-assistant",
+        element: <AiAssistantPage />
+      },
+      {
+        path: "/contracts",
+        element: <Navigate to="/documents" replace />
+      },
+      {
+        path: "/batches",
+        element: <Navigate to="/documents" replace />
+      },
+      {
         path: "/scan",
-        element: <ScanPage />
+        element: <Navigate to="/warehouse" replace />
       },
       {
         path: "/inventory",
-        element: <InventoryPage />
+        element: <Navigate to="/warehouse" replace />
       },
       {
         path: "/payments",
-        element: <PaymentsPage />
-      },
-      {
-        path: "/ai-assistant",
-        element: <AiAssistantPage />
+        element: <Navigate to="/finance" replace />
       }
     ]
   }
