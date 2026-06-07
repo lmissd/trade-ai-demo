@@ -4,6 +4,7 @@
 
 - 已完成阶段 0：项目初始化与规则固化。
 - 已完成阶段 1：搭建前后端基础骨架。
+- 已完成本次文档层面的重大设计升级：项目定位从“扫码库存 Demo”升级为“国际贸易 ERP 全链路演示版 Demo”。
 - 已补齐基础目录结构：`apps/`、`apps/web/`、`apps/server/`、`uploads/`、`generated_qr/`。
 - 已补齐基础项目文件：`docs/PROJECT_MEMORY.md`、`docs/API.md`、`.env.example`、`.gitignore`。
 - 已确认默认演示场景为中国采购 100 箱货发往赞比亚仓库，但该场景只作为默认值，后续实现必须支持配置或表单修改。
@@ -11,6 +12,19 @@
 - 已创建前端 React + Vite + TypeScript + Ant Design + React Router 骨架。
 - 已创建后端 Node.js + Express + TypeScript 骨架，并接通 `/api/health`。
 - 已在根目录建立 workspace 和统一启动脚本，可通过 `npm run dev` 同时启动前后端。
+- 已新增 `start-demo.bat` / `stop-demo.bat` 与对应 PowerShell 脚本，支持双击启动和关闭 Demo。
+
+## 本次重大设计调整
+
+- 新定位：项目从“扫码库存 Demo”升级为“国际贸易 ERP 全链路演示版 Demo”。
+- 新原则：核心链路真实可操作，外围模块虚拟展示。
+- 核心真实闭环仍然不变：合同/箱单上传、AI mock 识别、合同与批次生成、二维码生成、扫码入库、扫码出库、库存真实统计、AI 真实库存问答。
+- 新增成熟 ERP 展示模块：采购与境内集货、国际物流与运输、报关与清关、仓储管理、销售与境外物流配送、多公司主体管理、多币种与成本核算、财务回款核销、自动工单与提醒、数据报表与业务大盘。
+- 新的目标菜单结构调整为 14 个入口：首页驾驶舱、合同与单据、采购与集货、国际物流、报关清关、仓储管理、销售与配送、财务回款、成本利润、多公司主体、自动工单、数据报表、二维码追溯、AI 助手。
+- TODO 已重构为两个子阶段：
+  - Demo 1.0：核心真实闭环。
+  - Demo 1.5：成熟 ERP 模块包装。
+- 本次只完成文档与开发计划升级，尚未开始新增 ERP 展示模块业务代码开发。
 
 ## 关键技术选择
 
@@ -19,11 +33,13 @@
 - 数据库第一版计划使用 SQLite，后续可切换 PostgreSQL。
 - AI 第一版默认允许使用 mock 数据，真实接入必须放在后端，不允许把 API Key 写入前端。
 - 演示数据必须可配置，库存结果必须基于真实二维码状态动态计算，不能把 `100 / 20 / 80` 写死在代码里。
+- ERP Demo 采用“核心真实闭环 + 外围虚拟展示”的实现策略，优先保证扫码库存主链路真实可用。
 - 根目录采用 npm workspaces 管理 `apps/web` 与 `apps/server`。
 - 统一启动方式采用 `concurrently`，保证演示时一条命令即可拉起前后端。
 - 前端阶段 1 使用后台布局 + 9 个页面占位，先把路由和信息架构稳定下来。
+- 为了降低命令行操作，新增 Windows 双击启动方案：批处理文件负责调用 PowerShell 脚本并自动打开 `/dashboard`。
 
-## 已新增页面
+## 当前代码已实现页面
 
 - `/dashboard`
 - `/documents`
@@ -33,6 +49,23 @@
 - `/scan`
 - `/inventory`
 - `/payments`
+- `/ai-assistant`
+
+## 目标菜单结构（待 Demo 1.5 逐步落地）
+
+- `/dashboard`
+- `/documents`
+- `/procurement`
+- `/logistics`
+- `/customs`
+- `/warehouse`
+- `/sales`
+- `/finance`
+- `/costs`
+- `/companies`
+- `/work-orders`
+- `/reports`
+- `/qr-items`
 - `/ai-assistant`
 
 ## 已新增接口
@@ -51,8 +84,9 @@
 - 每次只允许完成 `docs/TODO.md` 中的一个大环节。
 - 每次开始前必须阅读 `docs/PROJECT_DESIGN.md`、`docs/TODO.md`、`docs/PROJECT_MEMORY.md`。
 - 完成后必须先自测，再更新 `docs/PROJECT_MEMORY.md` 和 `docs/TODO.md`。
-- 每个大环节完成后必须执行 `git commit` 和 `git push`。
-- 未经用户确认，不进入下一个大环节。
+- 自测完成后，必须先向用户汇报并等待用户手动验证流程是否满意。
+- 用户确认满意后，才允许执行 `git add`、`git commit` 和 `git push`。
+- 未经用户确认，不提交本地 Git、不推送 GitHub，也不进入下一个大环节。
 - AI 不能直接修改数据库，所有写入都必须经过后端接口和用户确认。
 
 ## 本阶段自测结果
@@ -70,6 +104,9 @@
 - 根目录统一启动通过：`npm run dev` 可同时启动前后端。
 - `GET http://127.0.0.1:3001/api/health` 返回 `status: ok`。
 - 前端 9 个占位路由均返回 `200`，包括 `/dashboard`、`/documents`、`/contracts`、`/batches`、`/qr-items`、`/scan`、`/inventory`、`/payments`、`/ai-assistant`。
+- `start-demo.bat` 可在服务未启动时拉起前后端，并自动打开 `http://127.0.0.1:5173/dashboard`。
+- 服务已运行时再次执行 `start-demo.bat`，会直接打开页面，不重复报错。
+- `stop-demo.bat` 可关闭 `5173` 与 `3001` 端口对应的 Demo 服务。
 
 ## 遇到的问题
 
@@ -77,10 +114,23 @@
 - 初次尝试时 HTTPS 推送失败，后续通过 SSH key 配置恢复了 GitHub 推送能力。
 - 前端构建初次因菜单项类型推断报错，已通过拆分 `routeMenuEntries` 和 `routeMenuItems` 修复。
 - Vite 构建存在 Ant Design 带来的 chunk size warning，但不影响阶段 1 骨架启动与构建，后续可在优化阶段再做拆包。
+- `127.0.0.1:5173` 拒绝连接的直接原因是开发服务未运行，现已通过双击启动脚本降低启动门槛。
 
 ## 下一步要做什么
 
-- 等待用户确认后，再进入阶段 2：数据库与基础数据模型。
+- 文档升级完成后，下一步应从 `docs/TODO.md` 的第一个未完成大环节开始。
+- 当前第一个未完成大环节是：阶段 2“数据库与演示配置基础”。
+- 阶段 2 将先落地 Prisma + SQLite、核心真实数据模型，以及可配置的默认演示场景来源。
+
+## 验收偏好更新
+
+- 从本次开始，阶段完成后的默认流程改为：
+  - 先实现并自测
+  - 再更新 `PROJECT_MEMORY.md` 和 `TODO.md`
+  - 然后向用户汇报并等待用户验证
+  - 用户确认满意后，再执行 Git 提交与 GitHub 推送
+- 阶段 1 已经按旧规则完成提交和推送；后续阶段将按照新规则执行。
+- 本次文档升级属于用户明确要求的文档重构任务，允许在本轮完成后直接执行指定的 docs commit 与 push。
 
 ## 本次 Git 提交
 
