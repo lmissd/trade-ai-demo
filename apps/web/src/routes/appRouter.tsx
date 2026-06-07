@@ -1,7 +1,9 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import App from "../App";
 import { AiAssistantPage } from "../pages/AiAssistantPage";
+import { BatchesPage } from "../pages/BatchesPage";
 import { CompaniesPage } from "../pages/CompaniesPage";
+import { ContractsPage } from "../pages/ContractsPage";
 import { CostsPage } from "../pages/CostsPage";
 import { CustomsPage } from "../pages/CustomsPage";
 import { DashboardPage } from "../pages/DashboardPage";
@@ -31,6 +33,14 @@ export const appRouter = createBrowserRouter([
       {
         path: "/documents",
         element: <DocumentsPage />
+      },
+      {
+        path: "/contracts",
+        element: <ContractsPage />
+      },
+      {
+        path: "/batches",
+        element: <BatchesPage />
       },
       {
         path: "/procurement",
@@ -79,14 +89,6 @@ export const appRouter = createBrowserRouter([
       {
         path: "/ai-assistant",
         element: <AiAssistantPage />
-      },
-      {
-        path: "/contracts",
-        element: <Navigate to="/documents" replace />
-      },
-      {
-        path: "/batches",
-        element: <Navigate to="/documents" replace />
       },
       {
         path: "/scan",

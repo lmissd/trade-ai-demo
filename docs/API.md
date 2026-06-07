@@ -1,6 +1,6 @@
 # API 规划（第一版）
 
-本文档记录当前已经实现和后续计划中的接口范围。
+本文档记录当前已经实现和后续规划中的接口范围。
 
 ## 设计原则
 
@@ -22,6 +22,11 @@
 ### `GET /api/documents`
 
 - 用途：查询已上传单据列表。
+- 当前返回：
+  - 原始文件信息
+  - AI 识别状态
+  - 草稿字段
+  - 是否已生成正式合同 / 批次
 
 ### `POST /api/documents/upload`
 
@@ -29,11 +34,18 @@
 - 表单字段：
   - `documentType`
   - `file`
+- 说明：
+  - 先写入 `Document`
+  - 保存原文件路径与元数据
+  - 中文文件名会做兼容解码
 
 ### `POST /api/documents/:id/extract`
 
 - 用途：触发 AI Mock 识别。
-- 说明：第一版识别结果来自后端 `DemoConfig`，并写入 `Document.extractedJson` 与 `AiLog`。
+- 说明：
+  - 第一版识别结果来自后端 `DemoConfig`
+  - 写入 `Document.extractedJson`
+  - 写入 `AiLog`
 
 ### `PATCH /api/documents/:id/extracted-fields`
 
@@ -49,46 +61,78 @@
   - `unit`
   - `amount`
   - `currency`
-
-## 阶段 4 计划接口
+- 说明：
+  - 当前仍然只是在修正草稿数据
+  - 还不会生成正式业务数据
 
 ### `POST /api/documents/:id/confirm`
 
-- 用途：用户确认识别结果后，生成合同与批次。
+- 用途：用户确认识别草稿后，正式生成业务数据。
+- 当前正式生成：
+  - `Contract`
+  - `ContractItem`
+  - `Batch`
+  - `PurchaseOrder`
+  - `PurchaseOrderItem`
+  - `Payment`
+  - `Receivable`
+- 关键规则：
+  - 幂等：重复点击不会重复生成
+  - 冲突校验：若合同号或批次号已被其他单据占用，会返回冲突错误
+  - 不生成库存
+  - 不生成二维码
+  - 只生成正式业务主数据
 
 ### `GET /api/contracts`
 
-- 用途：查询合同列表。
-
-### `POST /api/contracts`
-
-- 用途：新建合同。
+- 用途：查询正式合同列表。
+- 当前返回：
+  - 合同基础信息
+  - 关联批次摘要
+  - Payment 摘要
+  - Receivable 摘要
+  - 来源单据
 
 ### `GET /api/contracts/:id`
 
 - 用途：查询合同详情。
-
-### `PATCH /api/contracts/:id`
-
-- 用途：更新合同信息。
+- 当前返回：
+  - 合同主信息
+  - 合同明细 `ContractItem`
+  - 关联批次
+  - 采购草稿
+  - Payment
+  - Receivable
+  - 来源单据
 
 ### `GET /api/batches`
 
-- 用途：查询批次列表。
-
-### `POST /api/batches`
-
-- 用途：新建批次。
+- 用途：查询正式批次列表。
+- 当前返回：
+  - 批次主信息
+  - 关联合同信息
+  - 来源单据
+  - 二维码摘要 `qrSummary`
+- 当前阶段正常表现：
+  - `qrSummary.total = 0`
+  - `qrSummary.inStock = 0`
 
 ### `GET /api/batches/:id`
 
 - 用途：查询批次详情。
+- 当前返回：
+  - 批次主信息
+  - 关联合同
+  - 来源单据
+  - 二维码明细
+  - 库存流水
+  - `qrSummary`
 
 ## 阶段 5 计划接口
 
 ### `POST /api/batches/:id/generate-qr`
 
-- 用途：按批次数量生成二维码货物。
+- 用途：按批次数量生成 `QrItem`。
 
 ### `GET /api/qr-items`
 
@@ -132,5 +176,7 @@
 
 ### `POST /api/ai/ask`
 
-- 用途：根据真实库存、合同、回款等受控查询结果生成 AI 问答。
-- 说明：AI 不直接访问数据库，只基于后端受控查询结果组织自然语言回答。
+- 用途：基于真实库存、合同、回款等受控查询结果生成 AI 问答。
+- 说明：
+  - AI 不直接访问数据库
+  - 只基于后端受控查询结果组织自然语言回答

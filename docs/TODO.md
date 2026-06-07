@@ -65,23 +65,34 @@
   - [x] 上传 -> 识别 -> 保存 -> 回读链路
   - [x] 中文文件名上传验证
   - [x] TypeScript 无报错
-- [ ] 等待用户验证阶段 3
-- [ ] 用户确认后执行 `git add .`
-- [ ] 用户确认后执行 `git commit -m "feat: 完成合同单据上传和AI模拟识别"`
-- [ ] 用户确认后执行 `git push`
+- [x] 用户确认后执行 `git add .`
+- [x] 用户确认后执行 `git commit -m "feat: 完成合同单据上传和AI模拟识别"`
+- [x] 用户确认后执行 `git push`
 
 ### 阶段 4：合同与批次生成
 
-- [ ] 明确“单据识别草稿层”与“正式业务数据层”分离
-- [ ] 增加“确认生成业务数据”操作
-- [ ] 从 `Document.extractedJson` 生成 `Contract`
-- [ ] 生成 `ContractItem`
-- [ ] 生成 `Batch`
-- [ ] 生成 `PurchaseOrder`
-- [ ] 生成 `Payment / Receivable` 草稿
-- [ ] 页面明确提示：此时仍未形成库存
-- [ ] 自测并更新记忆
-- [ ] 等待用户验证后再提交 Git
+- [x] 明确“单据识别草稿层”与“正式业务数据层”分离
+- [x] 增加“确认生成业务数据”操作
+- [x] 从 `Document.extractedJson` 生成 `Contract`
+- [x] 生成 `ContractItem`
+- [x] 生成 `Batch`
+- [x] 生成 `PurchaseOrder`
+- [x] 生成 `Payment / Receivable` 草稿
+- [x] 生成后锁定草稿编辑，避免草稿与正式数据不一致
+- [x] 完成正式合同列表页
+- [x] 完成正式批次列表页
+- [x] 页面明确提示：此时仍未形成库存
+- [x] 完成阶段 4 自测
+  - [x] `POST /api/documents/:id/confirm`
+  - [x] `GET /api/contracts`
+  - [x] `GET /api/contracts/:id`
+  - [x] `GET /api/batches`
+  - [x] `GET /api/batches/:id`
+  - [x] 幂等确认验证
+  - [x] `npx tsc -p apps/server/tsconfig.json --noEmit`
+  - [x] `npm run build --workspace @trade-ai-demo/web`
+- [x] 等待用户验证阶段 4
+- [x] 用户确认后再提交 Git
 
 ### 阶段 5：二维码生成与二维码追溯
 
@@ -207,5 +218,4 @@
 
 ## 当前下一步
 
-- [ ] 继续等待用户验证阶段 3
-- [ ] 用户确认阶段 3 后，再进入 `阶段 4：合同与批次生成`
+- [ ] 下一大环节：`阶段 5：二维码生成与二维码追溯`

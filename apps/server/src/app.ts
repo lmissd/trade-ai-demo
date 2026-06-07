@@ -1,5 +1,7 @@
 import cors from "cors";
 import express from "express";
+import { batchesRouter } from "./routes/batches";
+import { contractsRouter } from "./routes/contracts";
 import { uploadsRoot } from "./config/paths";
 import { documentsRouter } from "./routes/documents";
 import { healthRouter } from "./routes/health";
@@ -22,6 +24,8 @@ export function createApp() {
   app.use("/api", healthRouter);
   app.use("/api/setup", setupRouter);
   app.use("/api/documents", documentsRouter);
+  app.use("/api/contracts", contractsRouter);
+  app.use("/api/batches", batchesRouter);
 
   return app;
 }

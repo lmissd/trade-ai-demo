@@ -5,14 +5,29 @@ import { routeMenuEntries, routeMenuItems, routeMetaByPath } from "../routes/rou
 const { Header, Content, Sider } = Layout;
 const { useBreakpoint } = Grid;
 
+function resolveSelectedMenuKey(pathname: string) {
+  const compatibilityMenuKeyByPrefix = [
+    { prefix: "/contracts", key: "/documents" },
+    { prefix: "/batches", key: "/documents" },
+    { prefix: "/scan", key: "/warehouse" },
+    { prefix: "/inventory", key: "/warehouse" },
+    { prefix: "/payments", key: "/finance" }
+  ];
+
+  const compatibilityMatch = compatibilityMenuKeyByPrefix.find((item) => pathname.startsWith(item.prefix));
+  if (compatibilityMatch) {
+    return compatibilityMatch.key;
+  }
+
+  return routeMenuEntries.find((item) => pathname.startsWith(item.key))?.key ?? "/dashboard";
+}
+
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const screens = useBreakpoint();
   const currentRoute = routeMetaByPath[location.pathname] ?? routeMetaByPath["/dashboard"];
-
-  const selectedKey =
-    routeMenuEntries.find((item) => location.pathname.startsWith(item.key))?.key ?? "/dashboard";
+  const selectedKey = resolveSelectedMenuKey(location.pathname);
 
   return (
     <Layout className="app-shell">

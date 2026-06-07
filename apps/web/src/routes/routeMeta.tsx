@@ -31,11 +31,19 @@ type RouteMenuEntry = {
 export const routeMetaByPath: Record<string, RouteMeta> = {
   "/dashboard": {
     title: "首页驾驶舱",
-    subtitle: "先把国际贸易 ERP 的总入口和讲故事主视角搭出来，后续再接入真实库存与经营状态。"
+    subtitle: "先展示国际贸易 ERP 的整体入口与演示主视角，后续再逐步接入真实库存和经营状态。"
   },
   "/documents": {
     title: "合同与单据",
-    subtitle: "承接合同上传、箱单上传、AI Mock 识别、人工确认，以及后续合同与批次生成。"
+    subtitle: "承接单据上传、AI Mock 识别、人工修正，以及确认生成正式合同与批次。"
+  },
+  "/contracts": {
+    title: "合同数据",
+    subtitle: "查看由单据草稿确认生成的正式合同、合同明细、采购草稿与应收草稿。"
+  },
+  "/batches": {
+    title: "批次数据",
+    subtitle: "查看合同下生成的货物批次，并为后续二维码生成、扫码入库和库存统计做准备。"
   },
   "/procurement": {
     title: "采购与集货",
@@ -43,7 +51,7 @@ export const routeMetaByPath: Record<string, RouteMeta> = {
   },
   "/logistics": {
     title: "国际物流",
-    subtitle: "展示运输批次、提单、柜号、起运与到港节点，帮助甲方看到完整国际运输链路。"
+    subtitle: "展示运输批次、提单、柜号、起运与到港节点，帮助演示完整国际运输链路。"
   },
   "/customs": {
     title: "报关清关",
@@ -51,7 +59,7 @@ export const routeMetaByPath: Record<string, RouteMeta> = {
   },
   "/warehouse": {
     title: "仓储管理",
-    subtitle: "后续把预收货、扫码收货、库存管理和销售出库统一收敛到这个核心模块。"
+    subtitle: "后续会把预收货、扫码收货、库存管理和销售出库统一收敛到这个核心模块。"
   },
   "/sales": {
     title: "销售与配送",

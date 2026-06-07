@@ -20,11 +20,46 @@ import {
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { InboxOutlined, ReloadOutlined, RobotOutlined, SaveOutlined } from "@ant-design/icons";
+import type { DescriptionsProps } from "antd";
+import {
+  BarsOutlined,
+  CheckCircleOutlined,
+  DeploymentUnitOutlined,
+  InboxOutlined,
+  ReloadOutlined,
+  RobotOutlined,
+  SaveOutlined
+} from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import { API_BASE_URL, requestJson, resolveApiUrl } from "../lib/api";
 
 type DocumentType = "CONTRACT" | "PACKING_LIST" | "BILL_OF_LADING" | "INVOICE" | "OTHER";
 type DocumentAiStatus = "PENDING" | "EXTRACTED" | "FAILED";
+
+type DocumentContractSummary = {
+  id: string;
+  contractNo: string;
+  status: string;
+  productName: string;
+  totalQuantity: number;
+  unit: string;
+  amount: number;
+  currency: string;
+  destinationWarehouse: string;
+  createdAt: string;
+};
+
+type DocumentBatchSummary = {
+  id: string;
+  batchNo: string;
+  status: string;
+  productName: string;
+  totalQuantity: number;
+  unit: string;
+  destinationWarehouse: string;
+  createdAt: string;
+  contractId: string;
+};
 
 type DocumentRecord = {
   id: string;
@@ -41,6 +76,8 @@ type DocumentRecord = {
   batchNoDraft: string | null;
   createdAt: string;
   updatedAt: string;
+  sourceContracts: DocumentContractSummary[];
+  sourceBatches: DocumentBatchSummary[];
 };
 
 type ExtractionFormValues = {
@@ -54,6 +91,70 @@ type ExtractionFormValues = {
   unit?: string;
   amount?: number;
   currency?: string;
+};
+
+type ConfirmBusinessDataResponse = {
+  created: boolean;
+  inventoryNotice: string;
+  document: DocumentRecord | null;
+  contract: {
+    id: string;
+    contractNo: string;
+    status: string;
+    customerName: string;
+    supplierName: string;
+    productName: string;
+    totalQuantity: number;
+    unit: string;
+    amount: number;
+    currency: string;
+    destinationWarehouse: string;
+    createdAt: string;
+  } | null;
+  batch: {
+    id: string;
+    batchNo: string;
+    contractId: string;
+    status: string;
+    sku: string;
+    productName: string;
+    totalQuantity: number;
+    unit: string;
+    destinationWarehouse: string;
+    createdAt: string;
+  } | null;
+  purchaseOrder: {
+    id: string;
+    purchaseNo: string;
+    contractId: string | null;
+    batchId: string | null;
+    status: string;
+    supplierName: string;
+    skuName: string;
+    quantity: number;
+    unit: string;
+    createdAt: string;
+  } | null;
+  payment: {
+    id: string;
+    contractId: string;
+    receivableAmount: number;
+    receivedAmount: number;
+    currency: string;
+    status: string;
+    dueDate: string | null;
+    createdAt: string;
+  } | null;
+  receivable: {
+    id: string;
+    contractId: string | null;
+    amount: number;
+    currency: string;
+    receivedAmount: number;
+    status: string;
+    dueDate: string | null;
+    createdAt: string;
+  } | null;
 };
 
 const documentTypeOptions: Array<{ label: string; value: DocumentType }> = [
@@ -100,6 +201,14 @@ function formatFileSize(size: number | null) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function formatAmount(amount?: number | null, currency?: string | null) {
+  if (typeof amount !== "number") {
+    return "-";
+  }
+
+  return `${amount.toLocaleString("zh-CN")} ${currency ?? ""}`.trim();
+}
+
 function toExtractionValues(document: DocumentRecord | null): ExtractionFormValues {
   if (!document?.extractedJson) {
     return {
@@ -140,22 +249,33 @@ function readNotes(document: DocumentRecord | null) {
   return notes.filter((item): item is string => typeof item === "string");
 }
 
+function getBusinessStatus(document: DocumentRecord) {
+  return document.sourceContracts.length > 0 || document.sourceBatches.length > 0;
+}
+
 export function DocumentsPage() {
+  const navigate = useNavigate();
   const [form] = Form.useForm<ExtractionFormValues>();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isConfirmingBusinessData, setIsConfirmingBusinessData] = useState(false);
   const [uploadType, setUploadType] = useState<DocumentType>("CONTRACT");
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [extractingDocumentId, setExtractingDocumentId] = useState<string | null>(null);
+  const [latestBusinessResult, setLatestBusinessResult] = useState<ConfirmBusinessDataResponse | null>(null);
 
   const selectedDocument = useMemo(
     () => documents.find((item) => item.id === selectedDocumentId) ?? null,
     [documents, selectedDocumentId]
   );
 
+  const selectedBusinessResult =
+    latestBusinessResult?.document?.id === selectedDocument?.id ? latestBusinessResult : null;
+
   const extractedCount = documents.filter((item) => item.aiStatus === "EXTRACTED").length;
+  const generatedCount = documents.filter((item) => getBusinessStatus(item)).length;
   const pendingCount = documents.filter((item) => item.aiStatus === "PENDING").length;
   const notes = useMemo(() => readNotes(selectedDocument), [selectedDocument]);
 
@@ -258,11 +378,40 @@ export function DocumentsPage() {
       );
 
       upsertDocument(document);
+      setLatestBusinessResult(null);
       message.success("识别字段已保存。");
     } catch (error) {
       message.error(error instanceof Error ? error.message : "保存失败。");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleConfirmBusinessData() {
+    if (!selectedDocument) {
+      return;
+    }
+
+    setIsConfirmingBusinessData(true);
+
+    try {
+      const result = await requestJson<ConfirmBusinessDataResponse>(
+        `/api/documents/${selectedDocument.id}/confirm`,
+        {
+          method: "POST"
+        }
+      );
+
+      if (result.document) {
+        upsertDocument(result.document);
+      }
+
+      setLatestBusinessResult(result);
+      message.success(result.created ? "正式业务数据已生成。" : "该单据已经生成过正式业务数据。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "生成业务数据失败。");
+    } finally {
+      setIsConfirmingBusinessData(false);
     }
   }
 
@@ -273,6 +422,14 @@ export function DocumentsPage() {
   useEffect(() => {
     form.setFieldsValue(toExtractionValues(selectedDocument));
   }, [form, selectedDocument]);
+
+  useEffect(() => {
+    if (latestBusinessResult?.document?.id !== selectedDocumentId) {
+      setLatestBusinessResult((current) =>
+        current?.document?.id === selectedDocumentId ? current : null
+      );
+    }
+  }, [latestBusinessResult, selectedDocumentId]);
 
   const columns: ColumnsType<DocumentRecord> = [
     {
@@ -296,6 +453,17 @@ export function DocumentsPage() {
       )
     },
     {
+      title: "业务状态",
+      key: "businessStatus",
+      width: 150,
+      render: (_, record) =>
+        getBusinessStatus(record) ? (
+          <Tag color="success">已生成正式数据</Tag>
+        ) : (
+          <Tag color="default">仍是草稿</Tag>
+        )
+    },
+    {
       title: "合同草稿",
       dataIndex: "contractNoDraft",
       width: 180,
@@ -316,7 +484,7 @@ export function DocumentsPage() {
     {
       title: "操作",
       key: "actions",
-      width: 250,
+      width: 260,
       render: (_, record) => (
         <Space wrap>
           <Button size="small" onClick={() => setSelectedDocumentId(record.id)}>
@@ -327,6 +495,7 @@ export function DocumentsPage() {
             type="primary"
             icon={<RobotOutlined />}
             loading={extractingDocumentId === record.id}
+            disabled={getBusinessStatus(record)}
             onClick={() => void handleExtract(record.id)}
           >
             AI 识别
@@ -341,13 +510,51 @@ export function DocumentsPage() {
     }
   ];
 
+  const generatedContract = selectedDocument?.sourceContracts[0] ?? null;
+  const generatedBatch = selectedDocument?.sourceBatches[0] ?? null;
+  const isBusinessGenerated = selectedDocument ? getBusinessStatus(selectedDocument) : false;
+
+  const generatedItems: DescriptionsProps["items"] = [
+    generatedContract
+      ? {
+          key: "contract",
+          label: "正式合同",
+          children: `${generatedContract.contractNo} · ${generatedContract.totalQuantity}${generatedContract.unit} · ${formatAmount(generatedContract.amount, generatedContract.currency)}`
+        }
+      : null,
+    generatedBatch
+      ? {
+          key: "batch",
+          label: "正式批次",
+          children: `${generatedBatch.batchNo} · ${generatedBatch.totalQuantity}${generatedBatch.unit} · ${generatedBatch.status}`
+        }
+      : null,
+    selectedBusinessResult?.purchaseOrder
+      ? {
+          key: "purchaseOrder",
+          label: "采购草稿",
+          children: `${selectedBusinessResult.purchaseOrder.purchaseNo} · ${selectedBusinessResult.purchaseOrder.quantity}${selectedBusinessResult.purchaseOrder.unit} · ${selectedBusinessResult.purchaseOrder.status}`
+        }
+      : null,
+    selectedBusinessResult?.payment
+      ? {
+          key: "payment",
+          label: "应收草稿",
+          children: `${formatAmount(
+            selectedBusinessResult.payment.receivableAmount,
+            selectedBusinessResult.payment.currency
+          )} · ${selectedBusinessResult.payment.status}`
+        }
+      : null
+  ].filter(Boolean) as DescriptionsProps["items"];
+
   return (
     <div className="document-workspace">
       <section className="page-hero">
         <h2>合同与单据真实闭环入口</h2>
         <p>
-          本页已经接入真实上传、单据列表、AI Mock 识别与人工修正。
-          阶段 4 将直接复用这里的识别草稿生成合同和批次。
+          本页现在已经区分了“单据识别草稿层”和“正式业务数据层”。上传、识别、人工修正都属于草稿流程；
+          只有点击“确认生成业务数据”后，系统才会正式创建合同、合同明细、批次、采购草稿和应收草稿。
         </p>
       </section>
 
@@ -360,7 +567,7 @@ export function DocumentsPage() {
                   上传合同 / 箱单
                 </Typography.Title>
                 <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                  先选择单据类型，再上传文件。当前支持把合同、箱单、提单、发票等单据录入到真实数据库。
+                  先选择单据类型，再上传文件。当前阶段只会把原始文件和识别草稿写入数据库，不会直接形成库存。
                 </Typography.Paragraph>
               </div>
 
@@ -386,7 +593,7 @@ export function DocumentsPage() {
                     {isUploading ? "正在上传单据..." : `点击上传${documentTypeLabelMap[uploadType]}`}
                   </Typography.Title>
                   <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                    Demo 第一版先保存原文件与元数据，随后通过 AI Mock 生成可编辑识别结果。
+                    第一版先保存原文件与元数据，随后通过 AI Mock 生成可编辑识别草稿。
                   </Typography.Paragraph>
                 </div>
               </Upload>
@@ -394,8 +601,8 @@ export function DocumentsPage() {
               <Alert
                 type="info"
                 showIcon
-                message="当前演示策略"
-                description="识别结果默认来自后端 DemoConfig，不写死在前端。你可以在识别后手工修正商品、客户、供应商、仓库、数量、单位、金额和币种。"
+                message="当前规则"
+                description="AI 识别结果默认来自后端 DemoConfig。你可以在识别后手工修正商品、客户、供应商、仓库、数量、单位、金额和币种；只有人工确认后才允许生成正式业务数据。"
               />
             </Space>
           </Card>
@@ -411,6 +618,9 @@ export function DocumentsPage() {
             </Card>
             <Card className="stat-card">
               <Statistic title="待识别" value={pendingCount} suffix="份" />
+            </Card>
+            <Card className="stat-card">
+              <Statistic title="已生成正式数据" value={generatedCount} suffix="份" />
             </Card>
           </div>
         </Col>
@@ -433,7 +643,7 @@ export function DocumentsPage() {
               columns={columns}
               dataSource={documents}
               pagination={{ pageSize: 6, hideOnSinglePage: true }}
-              scroll={{ x: 1100 }}
+              scroll={{ x: 1200 }}
               rowClassName={(record) =>
                 record.id === selectedDocumentId ? "documents-table-row-selected" : ""
               }
@@ -441,7 +651,7 @@ export function DocumentsPage() {
                 onClick: () => setSelectedDocumentId(record.id)
               })}
               locale={{
-                emptyText: <Empty description="还没有上传任何单据" />
+                emptyText: <Empty description="还没有上传任何单据。" />
               }}
             />
           </Card>
@@ -476,6 +686,15 @@ export function DocumentsPage() {
                       )
                     },
                     {
+                      key: "business",
+                      label: "业务状态",
+                      children: getBusinessStatus(selectedDocument) ? (
+                        <Tag color="success">已生成正式业务数据</Tag>
+                      ) : (
+                        <Tag color="default">仍是识别草稿</Tag>
+                      )
+                    },
+                    {
                       key: "updatedAt",
                       label: "最近更新",
                       children: formatDateTime(selectedDocument.updatedAt)
@@ -490,11 +709,12 @@ export function DocumentsPage() {
                     message="该单据还没有识别结果"
                     description={
                       <Space direction="vertical" size="middle">
-                        <span>点击下方按钮执行 AI Mock 识别，系统会从当前 DemoConfig 生成一份可编辑草稿。</span>
+                        <span>点击下方按钮执行 AI Mock 识别，系统会先生成一份可编辑草稿。</span>
                         <Button
                           type="primary"
                           icon={<RobotOutlined />}
                           loading={extractingDocumentId === selectedDocument.id}
+                          disabled={isBusinessGenerated}
                           onClick={() => void handleExtract(selectedDocument.id)}
                         >
                           立即执行 AI Mock 识别
@@ -504,69 +724,136 @@ export function DocumentsPage() {
                   />
                 ) : (
                   <>
+                    <Alert
+                      type="info"
+                      showIcon
+                      message={isBusinessGenerated ? "正式业务数据已生成，草稿已锁定" : "当前仍是识别草稿"}
+                      description={
+                        isBusinessGenerated
+                          ? "这份单据已经生成正式合同和批次。为避免草稿与正式数据不一致，当前演示版会先锁定草稿编辑；如需变更，后续应进入正式业务编辑流程。"
+                          : "这里展示的字段还只是识别草稿。你可以先人工修正，再点击“确认生成业务数据”。这一动作会正式创建合同、合同明细、批次、采购草稿和应收草稿，但仍然不会增加库存。"
+                      }
+                    />
+
                     <Form<ExtractionFormValues>
                       form={form}
                       layout="vertical"
+                      disabled={isBusinessGenerated}
                       onFinish={(values) => void handleSave(values)}
                     >
                       <Row gutter={16}>
                         <Col xs={24} md={12}>
-                          <Form.Item label="合同草稿号" name="contractNoDraft">
-                            <Input placeholder="例如 CTR-20260607-ABC123" />
+                          <Form.Item
+                            label="合同草稿号"
+                            name="contractNoDraft"
+                            rules={[{ required: true, message: "请输入合同草稿号。" }]}
+                          >
+                            <Input placeholder="例如 CTR-20260608-ABC123" />
                           </Form.Item>
                         </Col>
                         <Col xs={24} md={12}>
-                          <Form.Item label="批次草稿号" name="batchNoDraft">
-                            <Input placeholder="例如 BAT-20260607-ABC123" />
+                          <Form.Item
+                            label="批次草稿号"
+                            name="batchNoDraft"
+                            rules={[{ required: true, message: "请输入批次草稿号。" }]}
+                          >
+                            <Input placeholder="例如 BAT-20260608-ABC123" />
                           </Form.Item>
                         </Col>
                       </Row>
 
-                      <Form.Item label="商品名称" name="productName">
+                      <Form.Item
+                        label="商品名称"
+                        name="productName"
+                        rules={[{ required: true, message: "请输入商品名称。" }]}
+                      >
                         <Input placeholder="请输入商品名称" />
                       </Form.Item>
 
                       <Row gutter={16}>
                         <Col xs={24} md={12}>
-                          <Form.Item label="客户名称" name="customerName">
+                          <Form.Item
+                            label="客户名称"
+                            name="customerName"
+                            rules={[{ required: true, message: "请输入客户名称。" }]}
+                          >
                             <Input placeholder="请输入客户名称" />
                           </Form.Item>
                         </Col>
                         <Col xs={24} md={12}>
-                          <Form.Item label="供应商名称" name="supplierName">
+                          <Form.Item
+                            label="供应商名称"
+                            name="supplierName"
+                            rules={[{ required: true, message: "请输入供应商名称。" }]}
+                          >
                             <Input placeholder="请输入供应商名称" />
                           </Form.Item>
                         </Col>
                       </Row>
 
-                      <Form.Item label="目的仓库" name="destinationWarehouse">
+                      <Form.Item
+                        label="目的仓库"
+                        name="destinationWarehouse"
+                        rules={[{ required: true, message: "请输入目的仓库。" }]}
+                      >
                         <Input placeholder="请输入目的仓库" />
                       </Form.Item>
 
                       <Row gutter={16}>
                         <Col xs={24} md={8}>
-                          <Form.Item label="总数量" name="totalQuantity">
-                            <InputNumber min={0} style={{ width: "100%" }} />
+                          <Form.Item
+                            label="总数量"
+                            name="totalQuantity"
+                            rules={[{ required: true, message: "请输入总数量。" }]}
+                          >
+                            <InputNumber min={1} precision={0} style={{ width: "100%" }} />
                           </Form.Item>
                         </Col>
                         <Col xs={24} md={8}>
-                          <Form.Item label="单位" name="unit">
+                          <Form.Item
+                            label="单位"
+                            name="unit"
+                            rules={[
+                              { required: true, message: "请输入实际单位。" },
+                              {
+                                validator: async (_, value) => {
+                                  if (typeof value === "string" && value.trim() === "?") {
+                                    throw new Error("单位不能保存为 ?，请输入真实单位。");
+                                  }
+                                }
+                              }
+                            ]}
+                          >
                             <Input placeholder="例如 箱" />
                           </Form.Item>
                         </Col>
                         <Col xs={24} md={8}>
-                          <Form.Item label="币种" name="currency">
+                          <Form.Item
+                            label="币种"
+                            name="currency"
+                            rules={[{ required: true, message: "请输入币种。" }]}
+                          >
                             <Input placeholder="例如 USD" />
                           </Form.Item>
                         </Col>
                       </Row>
 
-                      <Form.Item label="合同金额" name="amount">
+                      <Form.Item
+                        label="合同金额"
+                        name="amount"
+                        rules={[{ required: true, message: "请输入合同金额。" }]}
+                      >
                         <InputNumber min={0} style={{ width: "100%" }} />
                       </Form.Item>
 
                       <Space wrap>
-                        <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={isSaving}>
+                        <Button
+                          type="primary"
+                          htmlType="submit"
+                          icon={<SaveOutlined />}
+                          loading={isSaving}
+                          disabled={isBusinessGenerated}
+                        >
                           保存人工修正
                         </Button>
                         {selectedDocument.fileUrl ? (
@@ -587,13 +874,71 @@ export function DocumentsPage() {
                         </ul>
                       </div>
                     ) : null}
+
+                    <Card
+                      className="placeholder-card"
+                      title="正式业务数据生成"
+                      size="small"
+                    >
+                      {getBusinessStatus(selectedDocument) ? (
+                        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                          <Alert
+                            type="success"
+                            showIcon
+                            message="这份单据已经生成正式业务数据"
+                            description="正式合同、批次和采购草稿已经落库，但当前仍然没有库存。库存要等后续二维码生成并扫码入库后才会增加。"
+                          />
+
+                          <Descriptions bordered size="small" column={1} items={generatedItems} />
+
+                          <Space wrap>
+                            <Button icon={<BarsOutlined />} onClick={() => navigate("/contracts")}>
+                              查看合同数据
+                            </Button>
+                            <Button icon={<DeploymentUnitOutlined />} onClick={() => navigate("/batches")}>
+                              查看批次数据
+                            </Button>
+                          </Space>
+                        </Space>
+                      ) : (
+                        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                          <Alert
+                            type="warning"
+                            showIcon
+                            message="还没有生成正式业务数据"
+                            description="请先确认草稿字段无误，再执行正式生成。系统会创建合同、合同明细、批次、采购草稿和应收草稿，但不会创建库存。"
+                          />
+
+                          <Button
+                            type="primary"
+                            icon={<CheckCircleOutlined />}
+                            loading={isConfirmingBusinessData}
+                            onClick={() => void handleConfirmBusinessData()}
+                          >
+                            确认生成业务数据
+                          </Button>
+
+                          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                            生成后可在“合同数据”和“批次数据”中查看正式记录。
+                          </Typography.Paragraph>
+                        </Space>
+                      )}
+
+                      {selectedBusinessResult ? (
+                        <Alert
+                          style={{ marginTop: 16 }}
+                          type="info"
+                          showIcon
+                          message="库存提示"
+                          description={selectedBusinessResult.inventoryNotice}
+                        />
+                      ) : null}
+                    </Card>
                   </>
                 )}
               </Space>
             ) : (
-              <Empty
-                description="从左侧上传第一份合同或箱单后，这里会显示识别结果与人工修正表单。"
-              />
+              <Empty description="从左侧上传第一份合同或箱单后，这里会显示识别结果和正式业务数据生成入口。" />
             )}
           </Card>
         </Col>
