@@ -1,0 +1,834 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+enum SystemUserRole {
+  OWNER
+  ADMIN
+  WAREHOUSE
+  FINANCE
+}
+
+enum DocumentType {
+  CONTRACT
+  PACKING_LIST
+  BILL_OF_LADING
+  INVOICE
+  OTHER
+}
+
+enum DocumentAiStatus {
+  PENDING
+  EXTRACTED
+  FAILED
+}
+
+enum ContractStatus {
+  DRAFT
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+}
+
+enum BatchStatus {
+  DRAFT
+  READY_FOR_QR
+  IN_TRANSIT
+  IN_STOCK
+  PARTIAL_OUTBOUND
+  COMPLETED
+}
+
+enum QrItemStatus {
+  PENDING_INBOUND
+  IN_STOCK
+  OUTBOUND
+  DAMAGED
+  LOST
+  FROZEN
+}
+
+enum StockMovementType {
+  INBOUND
+  OUTBOUND
+  TRANSFER
+  STOCKTAKE_GAIN
+  STOCKTAKE_LOSS
+  ADJUSTMENT
+  FREEZE
+  UNFREEZE
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum AiTaskType {
+  DOCUMENT_EXTRACT
+  INVENTORY_QA
+  WORK_ORDER_SUMMARY
+  CONSISTENCY_CHECK
+}
+
+enum AiTaskStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id             String          @id @default(cuid())
+  username       String          @unique
+  displayName    String
+  email          String?
+  phone          String?
+  role           SystemUserRole  @default(ADMIN)
+  status         String          @default("ACTIVE")
+  companyId      String?
+  departmentId   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  stockMovements StockMovement[]
+  aiLogs         AiLog[]
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  roleCode    String   @unique
+  roleName    String
+  description String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Permission {
+  id             String   @id @default(cuid())
+  permissionCode String   @unique
+  permissionName String
+  module         String?
+  action         String?
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId     String
+  roleId     String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, roleId])
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  @@unique([roleId, permissionId])
+}
+
+model Company {
+  id               String   @id @default(cuid())
+  companyCode      String   @unique
+  name             String
+  country          String
+  companyType      String?
+  responsibilities String?
+  status           String   @default("ACTIVE")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Department {
+  id             String   @id @default(cuid())
+  companyId      String?
+  departmentCode String   @unique
+  name           String
+  type           String?
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Sku {
+  id                     String   @id @default(cuid())
+  skuCode                String   @unique
+  name                   String
+  spec                   String?
+  unit                   String
+  category               String?
+  purchaseReferencePrice Float?
+  salesReferencePrice    Float?
+  status                 String   @default("ACTIVE")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  customerCode String  @unique
+  name         String
+  country      String
+  contactName  String?
+  phone        String?
+  email        String?
+  address      String?
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Supplier {
+  id           String   @id @default(cuid())
+  supplierCode String   @unique
+  name         String
+  country      String
+  contactName  String?
+  phone        String?
+  email        String?
+  address      String?
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Warehouse {
+  id            String   @id @default(cuid())
+  companyId     String?
+  warehouseCode String   @unique
+  name          String
+  country       String
+  city          String?
+  address       String?
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model WarehouseLocation {
+  id           String   @id @default(cuid())
+  warehouseId  String?
+  locationCode String   @unique
+  zone         String?
+  capacity     Int?
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Vehicle {
+  id          String   @id @default(cuid())
+  plateNo     String   @unique
+  companyId   String?
+  vehicleType String?
+  driverId    String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Driver {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  companyId String?
+  licenseNo String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DemoConfig {
+  id                      String   @id @default(cuid())
+  scenarioName            String   @unique
+  origin                  String
+  destinationWarehouse    String
+  customerName            String
+  supplierName            String
+  productName             String
+  totalQuantity           Int
+  unit                    String
+  plannedOutboundQuantity Int
+  amount                  Float
+  currency                String
+  customerId              String?
+  supplierId              String?
+  skuId                   String?
+  warehouseId             String?
+  status                  String   @default("ACTIVE")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model Document {
+  id              String           @id @default(cuid())
+  documentType    DocumentType
+  fileName        String
+  originalName    String?
+  filePath        String?
+  fileUrl         String?
+  mimeType        String?
+  size            Int?
+  aiStatus        DocumentAiStatus @default(PENDING)
+  extractedJson   Json?
+  contractNoDraft String?
+  batchNoDraft    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  aiLogs          AiLog[]
+  sourceContracts Contract[]
+  sourceBatches   Batch[]
+}
+
+model Contract {
+  id                   String         @id @default(cuid())
+  contractNo           String         @unique
+  contractType         String         @default("TRADE")
+  customerId           String?
+  customerName         String
+  supplierId           String?
+  supplierName         String
+  companyId            String?
+  productName          String
+  totalQuantity        Int
+  unit                 String
+  amount               Float
+  currency             String
+  destinationWarehouse String
+  paymentStatus        String         @default("UNPAID")
+  status               ContractStatus @default(DRAFT)
+  sourceDocumentId     String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  sourceDocument       Document?      @relation(fields: [sourceDocumentId], references: [id])
+  batches              Batch[]
+  payments             Payment[]
+  stockMovements       StockMovement[]
+}
+
+model ContractItem {
+  id         String   @id @default(cuid())
+  contractId String
+  skuId      String?
+  skuCode    String
+  skuName    String
+  quantity   Int
+  unit       String
+  unitPrice  Float?
+  amount     Float?
+  currency   String?
+  createdAt  DateTime @default(now())
+}
+
+model Batch {
+  id                   String        @id @default(cuid())
+  batchNo              String        @unique
+  contractId           String
+  sourceDocumentId     String?
+  skuId                String?
+  sku                  String
+  productName          String
+  totalQuantity        Int
+  unit                 String
+  destinationWarehouse String
+  warehouseId          String?
+  status               BatchStatus   @default(DRAFT)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  contract             Contract      @relation(fields: [contractId], references: [id])
+  sourceDocument       Document?     @relation(fields: [sourceDocumentId], references: [id])
+  qrItems              QrItem[]
+  stockMovements       StockMovement[]
+}
+
+model QrItem {
+  id               String          @id @default(cuid())
+  qrCode           String          @unique
+  batchId          String
+  contractId       String?
+  skuId            String?
+  serialNo         Int
+  productName      String?
+  status           QrItemStatus    @default(PENDING_INBOUND)
+  currentWarehouse String?
+  warehouseId      String?
+  locationId       String?
+  inboundAt        DateTime?
+  outboundAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  batch            Batch           @relation(fields: [batchId], references: [id])
+  stockMovements   StockMovement[]
+
+  @@unique([batchId, serialNo])
+}
+
+model StockMovement {
+  id            String            @id @default(cuid())
+  qrItemId      String
+  batchId       String
+  contractId    String
+  skuId         String?
+  movementType  StockMovementType
+  fromStatus    String?
+  toStatus      String?
+  warehouseName String?
+  warehouseId   String?
+  locationId    String?
+  operatorId    String?
+  operatorName  String?
+  note          String?
+  remark        String?
+  occurredAt    DateTime          @default(now())
+  createdAt     DateTime          @default(now())
+  qrItem        QrItem            @relation(fields: [qrItemId], references: [id])
+  batch         Batch             @relation(fields: [batchId], references: [id])
+  contract      Contract          @relation(fields: [contractId], references: [id])
+  operator      User?             @relation(fields: [operatorId], references: [id])
+}
+
+model InventorySnapshot {
+  id                     String   @id @default(cuid())
+  warehouseId            String?
+  batchId                String?
+  skuId                  String?
+  snapshotDate           DateTime
+  totalQuantity          Int      @default(0)
+  pendingInboundQuantity Int      @default(0)
+  inStockQuantity        Int      @default(0)
+  outboundQuantity       Int      @default(0)
+  frozenQuantity         Int      @default(0)
+  dataJson               Json?
+  createdAt              DateTime @default(now())
+}
+
+model StocktakeOrder {
+  id           String   @id @default(cuid())
+  stocktakeNo  String   @unique
+  warehouseId  String?
+  status       String   @default("PENDING")
+  operatorId   String?
+  operatorName String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model StocktakeItem {
+  id               String   @id @default(cuid())
+  stocktakeOrderId String
+  qrItemId         String?
+  skuId            String?
+  systemStatus     String?
+  actualStatus     String?
+  differenceType   String?
+  remark           String?
+  createdAt        DateTime @default(now())
+}
+
+model PurchaseOrder {
+  id           String   @id @default(cuid())
+  purchaseNo   String   @unique
+  contractId   String?
+  supplierId   String?
+  supplierName String
+  companyId    String?
+  skuId        String?
+  skuName      String
+  batchId      String?
+  quantity     Int
+  unit         String
+  deliveryDate DateTime?
+  status       String   @default("DRAFT")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  skuId           String?
+  skuCode         String
+  skuName         String
+  quantity        Int
+  unit            String
+  unitPrice       Float?
+  amount          Float?
+  currency        String?
+  createdAt       DateTime @default(now())
+}
+
+model Shipment {
+  id                   String   @id @default(cuid())
+  shipmentNo           String   @unique
+  contractId           String?
+  batchId              String?
+  purchaseOrderId      String?
+  shippingCompany      String?
+  billOfLadingNo       String?
+  containerNo          String?
+  originPort           String?
+  destinationPort      String?
+  departureTime        DateTime?
+  estimatedArrivalTime DateTime?
+  actualArrivalTime    DateTime?
+  status               String   @default("PENDING")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model ShipmentNode {
+  id         String   @id @default(cuid())
+  shipmentId String
+  nodeName   String
+  nodeStatus String?
+  nodeTime   DateTime?
+  remark     String?
+  createdAt  DateTime @default(now())
+}
+
+model CustomsClearance {
+  id                    String   @id @default(cuid())
+  clearanceNo           String   @unique
+  contractId            String?
+  batchId               String?
+  shipmentId            String?
+  responsibleCompany    String?
+  responsiblePerson     String?
+  packingListDocumentId String?
+  invoiceDocumentId     String?
+  billOfLadingDocumentId String?
+  certificateDocumentId String?
+  aiCheckResult         Json?
+  status                String   @default("PENDING")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model PreReceiveOrder {
+  id                  String   @id @default(cuid())
+  preReceiveNo        String   @unique
+  contractId          String?
+  batchId             String?
+  warehouseId         String?
+  expectedArrivalTime DateTime?
+  skuName             String
+  quantity            Int
+  unit                String
+  suggestedLocation   String?
+  status              String   @default("PENDING")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model InboundOrder {
+  id         String   @id @default(cuid())
+  inboundNo  String   @unique
+  contractId String?
+  batchId    String?
+  warehouseId String?
+  quantity   Int
+  unit       String
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model OutboundOrder {
+  id          String   @id @default(cuid())
+  outboundNo  String   @unique
+  salesOrderId String?
+  contractId  String?
+  batchId     String?
+  warehouseId String?
+  quantity    Int
+  unit        String
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SalesOrder {
+  id             String   @id @default(cuid())
+  salesNo        String   @unique
+  contractId     String?
+  batchId        String?
+  customerId     String?
+  customerName   String
+  companyId      String?
+  skuName        String
+  quantity       Int
+  unit           String
+  amount         Float
+  currency       String
+  deliveryMethod String?
+  deliveryStatus String   @default("PENDING")
+  signStatus     String   @default("UNSIGNED")
+  status         String   @default("DRAFT")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SalesOrderItem {
+  id           String   @id @default(cuid())
+  salesOrderId String
+  skuId        String?
+  skuCode      String
+  skuName      String
+  quantity     Int
+  unit         String
+  unitPrice    Float?
+  amount       Float?
+  currency     String?
+  createdAt    DateTime @default(now())
+}
+
+model DeliveryOrder {
+  id            String   @id @default(cuid())
+  deliveryNo    String   @unique
+  salesOrderId  String?
+  batchId       String?
+  warehouseId   String?
+  warehouseName String?
+  vehicleId     String?
+  driverId      String?
+  quantity      Int
+  unit          String
+  status        String   @default("PENDING_PICKUP")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model DeliveryOrderItem {
+  id              String   @id @default(cuid())
+  deliveryOrderId String
+  qrItemId        String?
+  skuId           String?
+  quantity        Int
+  unit            String
+  createdAt       DateTime @default(now())
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  contractId       String
+  customerId       String?
+  receivableAmount Float
+  receivedAmount   Float         @default(0)
+  currency         String
+  status           PaymentStatus @default(UNPAID)
+  dueDate          DateTime?
+  paidAt           DateTime?
+  receivedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  contract         Contract      @relation(fields: [contractId], references: [id])
+}
+
+model Receivable {
+  id             String   @id @default(cuid())
+  contractId     String?
+  salesOrderId   String?
+  customerId     String?
+  amount         Float
+  currency       String
+  dueDate        DateTime?
+  receivedAmount Float    @default(0)
+  status         String   @default("UNPAID")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Payable {
+  id          String   @id @default(cuid())
+  contractId  String?
+  supplierId  String?
+  amount      Float
+  currency    String
+  dueDate     DateTime?
+  paidAmount  Float    @default(0)
+  status      String   @default("UNPAID")
+  payableType String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Invoice {
+  id          String   @id @default(cuid())
+  invoiceNo   String   @unique
+  contractId  String?
+  invoiceType String
+  amount      Float
+  currency    String
+  issueDate   DateTime?
+  status      String   @default("PENDING")
+  documentId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CostItem {
+  id                 String   @id @default(cuid())
+  contractId         String?
+  batchId            String?
+  costType           String
+  amount             Float
+  currency           String
+  exchangeRate       Float?
+  baseCurrencyAmount Float?
+  remark             String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model ExchangeRate {
+  id           String   @id @default(cuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Float
+  rateDate     DateTime
+  source       String?
+  createdAt    DateTime @default(now())
+
+  @@unique([fromCurrency, toCurrency, rateDate])
+}
+
+model BankAccount {
+  id          String   @id @default(cuid())
+  companyId   String?
+  bankName    String
+  accountName String
+  accountNo   String
+  currency    String
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Settlement {
+  id           String   @id @default(cuid())
+  settlementNo String   @unique
+  contractId   String?
+  companyId    String?
+  amount       Float
+  currency     String
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model WorkOrder {
+  id                  String   @id @default(cuid())
+  workOrderNo         String   @unique
+  type                String
+  title               String
+  content             String?
+  responsibleDepartment String?
+  responsiblePerson   String?
+  status              String   @default("PENDING")
+  priority            String   @default("NORMAL")
+  startTime           DateTime?
+  dueTime             DateTime?
+  contractId          String?
+  batchId             String?
+  documentId          String?
+  relatedEntityType   String?
+  relatedEntityId     String?
+  completionCondition String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Approval {
+  id           String   @id @default(cuid())
+  approvalNo   String   @unique
+  approvalType String
+  entityType   String
+  entityId     String
+  applicantId  String?
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ApprovalStep {
+  id          String   @id @default(cuid())
+  approvalId  String
+  stepNo      Int
+  approverId  String?
+  approverName String?
+  status      String   @default("PENDING")
+  comment     String?
+  approvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([approvalId, stepNo])
+}
+
+model Notification {
+  id                String   @id @default(cuid())
+  userId            String?
+  title             String
+  content           String
+  type              String
+  status            String   @default("UNREAD")
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime @default(now())
+  readAt            DateTime?
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  username   String?
+  action     String
+  entityType String
+  entityId   String?
+  beforeJson Json?
+  afterJson  Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+}
+
+model AiLog {
+  id           String       @id @default(cuid())
+  taskType     AiTaskType
+  status       AiTaskStatus @default(PENDING)
+  scenario     String?
+  provider     String       @default("mock")
+  model        String?
+  userId       String?
+  documentId   String?
+  promptText   String?
+  inputText    String?
+  responseText String?
+  outputText   String?
+  responseJson Json?
+  parsedJson   Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  user         User?        @relation(fields: [userId], references: [id])
+  document     Document?    @relation(fields: [documentId], references: [id])
+}
+
+model ReportSnapshot {
+  id           String   @id @default(cuid())
+  reportType   String
+  snapshotDate DateTime
+  dataJson     Json
+  createdAt    DateTime @default(now())
+}

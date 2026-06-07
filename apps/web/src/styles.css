@@ -134,10 +134,14 @@ a {
   position: sticky;
   top: 0;
   z-index: 10;
+  height: auto !important;
+  min-height: 0 !important;
+  line-height: 1.4 !important;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
   padding: 20px 24px;
   background: rgba(255, 255, 255, 0.6) !important;
   backdrop-filter: blur(18px);

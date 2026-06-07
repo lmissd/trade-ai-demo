@@ -1,155 +1,262 @@
 # 项目记忆
 
-## 当前已完成
+## 当前阶段
 
 - 已完成阶段 0：项目初始化与规则固化。
-- 已完成阶段 1：搭建前后端基础骨架。
-- 已按新意见完成“阶段 1 重做”：前端骨架已升级为 14 项 ERP 菜单结构。
-- 已完成本次文档层面的重大设计升级：项目定位从“扫码库存 Demo”升级为“国际贸易 ERP 全链路演示版 Demo”。
-- 已补齐基础目录结构：`apps/`、`apps/web/`、`apps/server/`、`uploads/`、`generated_qr/`。
-- 已补齐基础项目文件：`docs/PROJECT_MEMORY.md`、`docs/API.md`、`.env.example`、`.gitignore`。
-- 已确认默认演示场景为中国采购 100 箱货发往赞比亚仓库，但该场景只作为默认值，后续实现必须支持配置或表单修改。
-- 已完成 Git 初始化、本地提交、GitHub SSH 连通验证与远端推送。
-- 已创建前端 React + Vite + TypeScript + Ant Design + React Router 骨架。
-- 已创建后端 Node.js + Express + TypeScript 骨架，并接通 `/api/health`。
-- 已在根目录建立 workspace 和统一启动脚本，可通过 `npm run dev` 同时启动前后端。
-- 已新增 `start-demo.bat` / `stop-demo.bat` 与对应 PowerShell 脚本，支持双击启动和关闭 Demo。
-- 已保留双击 BAT 直接打开浏览器检阅效果，默认打开 `http://127.0.0.1:5173/dashboard`。
+- 已完成阶段 1：前后端基础骨架与 14 个 ERP 菜单入口。
+- 当前刚完成阶段 2 升级版：
+  `阶段 2：数据库与成熟 ERP Demo 数据库底座`
+- 本轮仍未执行 Git 提交和 GitHub 推送，需先等用户验证。
 
-## 本次重大设计调整
+## 本次目标
 
-- 新定位：项目从“扫码库存 Demo”升级为“国际贸易 ERP 全链路演示版 Demo”。
-- 新原则：核心链路真实可操作，外围模块虚拟展示。
-- 核心真实闭环仍然不变：合同/箱单上传、AI mock 识别、合同与批次生成、二维码生成、扫码入库、扫码出库、库存真实统计、AI 真实库存问答。
-- 新增成熟 ERP 展示模块：采购与境内集货、国际物流与运输、报关与清关、仓储管理、销售与境外物流配送、多公司主体管理、多币种与成本核算、财务回款核销、自动工单与提醒、数据报表与业务大盘。
-- 新的目标菜单结构调整为 14 个入口：首页驾驶舱、合同与单据、采购与集货、国际物流、报关清关、仓储管理、销售与配送、财务回款、成本利润、多公司主体、自动工单、数据报表、二维码追溯、AI 助手。
-- TODO 已重构为两个子阶段：
-  - Demo 1.0：核心真实闭环。
-  - Demo 1.5：成熟 ERP 模块包装。
-- 本次只完成文档与开发计划升级，尚未开始新增 ERP 展示模块业务代码开发。
+- 一次性补齐成熟 ERP Demo 后续可能用到的核心数据库底座。
+- 保留扫码库存真实闭环所需核心模型。
+- 将演示场景配置从纯环境变量升级为数据库 `DemoConfig` 主配置。
+- 更新 `/api/setup/status`，让它能展示所有核心表的 `counts`。
+- 更新 `docs/TODO.md` 与本记忆文件，明确阶段 2 已达到的程度。
 
-## 本轮阶段 1 重做内容
+## 当前数据库模型清单
 
-- 前端菜单已从旧版 9 个核心页面骨架，升级为新版 14 项 ERP 菜单骨架。
-- 已新增页面入口：`/procurement`、`/logistics`、`/customs`、`/warehouse`、`/sales`、`/finance`、`/costs`、`/companies`、`/work-orders`、`/reports`。
-- 已保留核心入口：`/dashboard`、`/documents`、`/qr-items`、`/ai-assistant`。
-- 已增加旧入口兼容跳转：
-  - `/contracts`、`/batches` -> `/documents`
-  - `/scan`、`/inventory` -> `/warehouse`
-  - `/payments` -> `/finance`
-- 当前这些页面仍为演示骨架，但新版信息架构已经可以直接用于浏览器检阅。
-- 在用户验收过程中已修复左侧深色菜单上的文字对比度问题，现已对菜单文字、图标、hover 与选中态做强制高对比覆盖。
+| 表名 / Prisma Model | 是否已存在 | 作用 | 当前关键字段 |
+|---|---|---|---|
+| User | 是 | 系统用户与操作人 | username, displayName, role, status, companyId, departmentId |
+| Role | 是 | 角色主数据 | roleCode, roleName, description, status |
+| Permission | 是 | 权限主数据 | permissionCode, permissionName, module, action |
+| UserRole | 是 | 用户与角色关联 | userId, roleId |
+| RolePermission | 是 | 角色与权限关联 | roleId, permissionId |
+| Company | 是 | 多公司主体 | companyCode, name, country, companyType |
+| Department | 是 | 部门主数据 | companyId, departmentCode, name, type |
+| Sku | 是 | 商品 SKU 主数据 | skuCode, name, spec, unit, category |
+| Customer | 是 | 客户主数据 | customerCode, name, country, contactName |
+| Supplier | 是 | 供应商主数据 | supplierCode, name, country, contactName |
+| Warehouse | 是 | 仓库主数据 | companyId, warehouseCode, name, country, city |
+| WarehouseLocation | 是 | 库位主数据 | warehouseId, locationCode, zone, capacity |
+| Vehicle | 是 | 车辆主数据 | plateNo, companyId, vehicleType, driverId |
+| Driver | 是 | 司机主数据 | name, phone, companyId, licenseNo |
+| DemoConfig | 是 | 演示场景配置源 | scenarioName, origin, destinationWarehouse, totalQuantity, plannedOutboundQuantity |
+| Document | 是 | 上传单据 | documentType, fileName, filePath, fileUrl, aiStatus |
+| Contract | 是 | 合同主表 | contractNo, contractType, customerId, supplierId, amount, paymentStatus |
+| ContractItem | 是 | 合同明细 | contractId, skuId, skuCode, quantity, amount |
+| Batch | 是 | 货物批次档案 | batchNo, contractId, skuId, totalQuantity, warehouseId, status |
+| QrItem | 是 | 单箱二维码货物 | qrCode, batchId, serialNo, status, warehouseId, locationId |
+| StockMovement | 是 | 库存流水 | qrItemId, batchId, contractId, movementType, fromStatus, toStatus |
+| InventorySnapshot | 是 | 库存快照 | warehouseId, batchId, skuId, snapshotDate, inStockQuantity |
+| StocktakeOrder | 是 | 盘点任务单 | stocktakeNo, warehouseId, status, operatorId |
+| StocktakeItem | 是 | 盘点明细 | stocktakeOrderId, qrItemId, skuId, differenceType |
+| PurchaseOrder | 是 | 采购单 | purchaseNo, contractId, supplierId, skuId, quantity, status |
+| PurchaseOrderItem | 是 | 采购单明细 | purchaseOrderId, skuId, skuCode, quantity, amount |
+| Shipment | 是 | 国际物流主表 | shipmentNo, contractId, batchId, billOfLadingNo, containerNo, status |
+| ShipmentNode | 是 | 物流节点时间轴 | shipmentId, nodeName, nodeStatus, nodeTime |
+| CustomsClearance | 是 | 报关清关主表 | clearanceNo, contractId, batchId, shipmentId, status |
+| PreReceiveOrder | 是 | 预收货单 | preReceiveNo, batchId, warehouseId, expectedArrivalTime, status |
+| InboundOrder | 是 | 入库单 | inboundNo, batchId, warehouseId, quantity, status |
+| OutboundOrder | 是 | 出库单 | outboundNo, salesOrderId, batchId, warehouseId, quantity, status |
+| SalesOrder | 是 | 销售单 | salesNo, contractId, customerId, amount, deliveryStatus, signStatus |
+| SalesOrderItem | 是 | 销售单明细 | salesOrderId, skuId, skuCode, quantity, amount |
+| DeliveryOrder | 是 | 配送单 | deliveryNo, salesOrderId, warehouseId, vehicleId, driverId, status |
+| DeliveryOrderItem | 是 | 配送明细 | deliveryOrderId, qrItemId, skuId, quantity |
+| Payment | 是 | 合同回款 | contractId, customerId, receivableAmount, receivedAmount, status |
+| Receivable | 是 | 应收账款 | contractId, salesOrderId, customerId, amount, dueDate, status |
+| Payable | 是 | 应付账款 | contractId, supplierId, amount, dueDate, payableType, status |
+| Invoice | 是 | 发票 | invoiceNo, contractId, invoiceType, amount, documentId |
+| CostItem | 是 | 成本明细 | contractId, batchId, costType, amount, exchangeRate |
+| ExchangeRate | 是 | 汇率 | fromCurrency, toCurrency, rate, rateDate |
+| BankAccount | 是 | 银行账户 | companyId, bankName, accountName, accountNo, currency |
+| Settlement | 是 | 结算单 | settlementNo, contractId, companyId, amount, status |
+| WorkOrder | 是 | 自动工单 | workOrderNo, type, title, status, contractId, batchId |
+| Approval | 是 | 审批单 | approvalNo, approvalType, entityType, entityId, status |
+| ApprovalStep | 是 | 审批步骤 | approvalId, stepNo, approverId, status |
+| Notification | 是 | 通知提醒 | userId, title, type, status, relatedEntityType |
+| AuditLog | 是 | 操作审计 | userId, username, action, entityType, beforeJson, afterJson |
+| AiLog | 是 | AI 调用记录 | taskType, scenario, provider, inputText, outputText, parsedJson |
+| ReportSnapshot | 是 | 报表快照 | reportType, snapshotDate, dataJson |
 
-## 关键技术选择
+补充：
 
-- 第一版采用 Web Demo 路线，前端计划使用 React + Vite + TypeScript。
-- 后端计划使用 Node.js + Express + TypeScript。
-- 数据库第一版计划使用 SQLite，后续可切换 PostgreSQL。
-- AI 第一版默认允许使用 mock 数据，真实接入必须放在后端，不允许把 API Key 写入前端。
-- 演示数据必须可配置，库存结果必须基于真实二维码状态动态计算，不能把 `100 / 20 / 80` 写死在代码里。
-- ERP Demo 采用“核心真实闭环 + 外围虚拟展示”的实现策略，优先保证扫码库存主链路真实可用。
-- 根目录采用 npm workspaces 管理 `apps/web` 与 `apps/server`。
-- 统一启动方式采用 `concurrently`，保证演示时一条命令即可拉起前后端。
-- 前端阶段 1 使用后台布局 + 9 个页面占位，先把路由和信息架构稳定下来。
-- 为了降低命令行操作，新增 Windows 双击启动方案：批处理文件负责调用 PowerShell 脚本并自动打开 `/dashboard`。
+- 本地迁移执行记录表 `_demo_migrations` 仍然保留，用于自定义 SQL migration 执行器。
+- 当前数据库已从原先 8 张核心业务表，扩展为 51 个 Prisma model + 1 张本地迁移记录表。
 
-## 当前代码已实现页面
+## 核心真实闭环表
 
-- `/dashboard`
-- `/documents`
-- `/procurement`
-- `/logistics`
-- `/customs`
-- `/warehouse`
-- `/sales`
-- `/finance`
-- `/costs`
-- `/companies`
-- `/work-orders`
-- `/reports`
-- `/qr-items`
-- `/ai-assistant`
+以下表直接服务于 Demo 1.0 的真实闭环：
 
-## 兼容旧入口
+- `DemoConfig`
+- `User`
+- `Document`
+- `Contract`
+- `ContractItem`
+- `Batch`
+- `QrItem`
+- `StockMovement`
+- `InventorySnapshot`
+- `Payment`
+- `Warehouse`
+- `WarehouseLocation`
+- `AiLog`
 
-- `/contracts` -> `/documents`
-- `/batches` -> `/documents`
-- `/scan` -> `/warehouse`
-- `/inventory` -> `/warehouse`
-- `/payments` -> `/finance`
+## 外围成熟展示模块表
 
-## 已新增接口
+以下表主要服务于 Demo 1.5 的成熟 ERP 形态展示：
 
-- `GET /`
-- `GET /api/health`
-- `docs/API.md` 中已整理后续阶段计划接口清单，供按顺序落地。
+- `PurchaseOrder`
+- `PurchaseOrderItem`
+- `Shipment`
+- `ShipmentNode`
+- `CustomsClearance`
+- `PreReceiveOrder`
+- `InboundOrder`
+- `OutboundOrder`
+- `SalesOrder`
+- `SalesOrderItem`
+- `DeliveryOrder`
+- `DeliveryOrderItem`
+- `Receivable`
+- `Payable`
+- `Invoice`
+- `CostItem`
+- `ExchangeRate`
+- `WorkOrder`
+- `ReportSnapshot`
 
-## 已新增数据表
+## 企业级扩展预留表
 
-- 暂无实际数据表实现。
-- 已在设计文档中明确第一版计划数据模型：`User`、`Document`、`Contract`、`Batch`、`QrItem`、`StockMovement`、`Payment`、`AiLog`。
+以下表已提前预留，当前阶段可先存在、可先为 0 条数据：
 
-## 项目规则固化
+- `Role`
+- `Permission`
+- `UserRole`
+- `RolePermission`
+- `Company`
+- `Department`
+- `Vehicle`
+- `Driver`
+- `StocktakeOrder`
+- `StocktakeItem`
+- `BankAccount`
+- `Settlement`
+- `Approval`
+- `ApprovalStep`
+- `Notification`
+- `AuditLog`
 
-- 每次只允许完成 `docs/TODO.md` 中的一个大环节。
-- 每次开始前必须阅读 `docs/PROJECT_DESIGN.md`、`docs/TODO.md`、`docs/PROJECT_MEMORY.md`。
-- 完成后必须先自测，再更新 `docs/PROJECT_MEMORY.md` 和 `docs/TODO.md`。
-- 自测完成后，必须先向用户汇报并等待用户手动验证流程是否满意。
-- 用户确认满意后，才允许执行 `git add`、`git commit` 和 `git push`。
-- 未经用户确认，不提交本地 Git、不推送 GitHub，也不进入下一个大环节。
-- AI 不能直接修改数据库，所有写入都必须经过后端接口和用户确认。
+## 当前健康检查接口统计范围
 
-## 本阶段自测结果
+当前 `GET /api/setup/status` 已统计以下模型数量：
 
-- 目录结构已创建完成。
-- 阶段 0 所需基础文件已补齐。
-- 本地 Git 已初始化，当前分支为 `main`。
-- GitHub remote 当前已配置为 `git@github.com:lmissd/trade-ai-demo.git`。
-- SSH 认证已通过，返回 `Hi lmissd! You've successfully authenticated`。
-- `origin/main` 已成功关联并确认包含当前提交 `6b88212a43184e79a0f543b82abceabd3cfac562`。
-- `npm install` 成功完成，workspace 依赖安装正常。
-- 前端单独构建通过：`npm run build --workspace @trade-ai-demo/web`。
-- 后端单独构建通过：`npm run build --workspace @trade-ai-demo/server`。
-- 根目录统一构建通过：`npm run build`。
-- 根目录统一启动通过：`npm run dev` 可同时启动前后端。
-- `GET http://127.0.0.1:3001/api/health` 返回 `status: ok`。
-- 前端新版菜单路由可访问，包括 `/dashboard`、`/documents`、`/procurement`、`/warehouse`、`/finance` 等新版入口。
-- 通过 Vite 开发服务器返回源码确认，新菜单文案已包含“首页驾驶舱”“采购与集货”“报关清关”“自动工单”等新版 ERP 模块。
-- 左侧菜单样式已重新覆盖，深色背景下的菜单文字与图标不再依赖 Ant Design 默认颜色。
-- `start-demo.bat` 可在服务未启动时拉起前后端，并自动打开 `http://127.0.0.1:5173/dashboard`。
-- 服务已运行时再次执行 `start-demo.bat`，会直接打开页面，不重复报错。
-- `stop-demo.bat` 可关闭 `5173` 与 `3001` 端口对应的 Demo 服务。
-- 本轮已实际执行 `stop-demo -> start-demo` 完整重启，确认新版骨架可通过双击启动链路重新拉起。
+- `users`
+- `roles`
+- `permissions`
+- `userRoles`
+- `rolePermissions`
+- `companies`
+- `departments`
+- `skus`
+- `customers`
+- `suppliers`
+- `warehouses`
+- `warehouseLocations`
+- `vehicles`
+- `drivers`
+- `documents`
+- `contracts`
+- `contractItems`
+- `batches`
+- `qrItems`
+- `stockMovements`
+- `inventorySnapshots`
+- `stocktakeOrders`
+- `stocktakeItems`
+- `purchaseOrders`
+- `purchaseOrderItems`
+- `shipments`
+- `shipmentNodes`
+- `customsClearances`
+- `preReceiveOrders`
+- `inboundOrders`
+- `outboundOrders`
+- `salesOrders`
+- `salesOrderItems`
+- `deliveryOrders`
+- `deliveryOrderItems`
+- `payments`
+- `receivables`
+- `payables`
+- `invoices`
+- `costItems`
+- `exchangeRates`
+- `bankAccounts`
+- `settlements`
+- `workOrders`
+- `approvals`
+- `approvalSteps`
+- `notifications`
+- `auditLogs`
+- `aiLogs`
+- `reportSnapshots`
+- `demoConfigs`
 
-## 遇到的问题
+## 当前 seed 已创建的演示数据
 
-- 当前工作目录最开始不是 Git 仓库，也没有 `docs/PROJECT_MEMORY.md`，已在本阶段补齐并初始化。
-- 初次尝试时 HTTPS 推送失败，后续通过 SSH key 配置恢复了 GitHub 推送能力。
-- 前端构建初次因菜单项类型推断报错，已通过拆分 `routeMenuEntries` 和 `routeMenuItems` 修复。
-- Vite 构建存在 Ant Design 带来的 chunk size warning，但不影响阶段 1 骨架启动与构建，后续可在优化阶段再做拆包。
-- `127.0.0.1:5173` 拒绝连接的直接原因是开发服务未运行，现已通过双击启动脚本降低启动门槛。
+- 默认用户：`demo-owner`
+- 默认角色：`OWNER` `ADMIN` `WAREHOUSE` `FINANCE`
+- 默认用户角色关联：`demo-owner -> OWNER`
+- 公司主体 5 条：
+  - 境内公司
+  - 香港公司
+  - 新加坡公司
+  - 赞比亚公司
+  - 刚果金公司
+- 部门 6 条：
+  - 采购部
+  - 物流部
+  - 清关部
+  - 仓库部
+  - 销售部
+  - 财务部
+- 示例 SKU 1 条：`SKU-DEMO-001`
+- 示例客户 1 条：`ABC Trading Zambia`
+- 示例供应商 1 条：`China Supplier Co., Ltd.`
+- 示例仓库 1 条：`Zambia Warehouse`
+- 示例库位 1 条：`A-01-01`
+- 默认演示场景配置 1 条：
+  - 起点：`China`
+  - 目的仓：`Zambia Warehouse`
+  - 商品：`Demo Goods`
+  - 数量：`100 箱`
+  - 计划出库：`20 箱`
+  - 金额：`50000 USD`
 
-## 下一步要做什么
+## 本轮自测结果
 
-- 新版阶段 1 骨架已完成，下一步应从 `docs/TODO.md` 的第一个未完成大环节开始。
-- 当前第一个未完成大环节是：阶段 2“数据库与演示配置基础”。
-- 阶段 2 将先落地 Prisma + SQLite、核心真实数据模型，以及可配置的默认演示场景来源。
+- `npm run prisma:generate --workspace @trade-ai-demo/server`：通过
+- `npm run prisma:migrate --workspace @trade-ai-demo/server`：通过
+- `npm run prisma:seed --workspace @trade-ai-demo/server`：通过
+- `npm run build --workspace @trade-ai-demo/server`：通过
+- 临时启动后端并请求 `http://127.0.0.1:3001/api/setup/status`：通过
+- 当前返回结果验证通过：
+  - `users = 1`
+  - `roles = 4`
+  - `companies = 5`
+  - `departments = 6`
+  - `skus = 1`
+  - `customers = 1`
+  - `suppliers = 1`
+  - `warehouses = 1`
+  - `warehouseLocations = 1`
+  - `demoConfigs = 1`
+  - 其余外围业务表当前为 `0`，符合“先建底座、后接业务流程”的阶段目标
 
-## 验收偏好更新
+## 当前规则状态
 
-- 从本次开始，阶段完成后的默认流程改为：
-  - 先实现并自测
-  - 再更新 `PROJECT_MEMORY.md` 和 `TODO.md`
-  - 然后向用户汇报并等待用户验证
-  - 用户确认满意后，再执行 Git 提交与 GitHub 推送
-- 阶段 1 已经按旧规则完成提交和推送；后续阶段将按照新规则执行。
-- 本次文档升级属于用户明确要求的文档重构任务，允许在本轮完成后直接执行指定的 docs commit 与 push。
+- 每次只做 `docs/TODO.md` 中的一个大环节。
+- 完成后先自测，再更新记忆与 TODO。
+- 完成后先等待用户验证，不立即提交 Git。
+- 只有用户确认满意后，才执行 `git add`、`git commit`、`git push`。
+- AI 不直接写数据库，所有后续业务写入必须经过后端接口与用户确认。
 
-## 本次 Git 提交
+## 下一步应该做什么
 
-- 阶段 0 初始化提交：`chore: 初始化项目结构和开发规则`
-- 已推送提交 hash：`6b88212a43184e79a0f543b82abceabd3cfac562`
-- 阶段 0 文档同步提交：`docs: 同步阶段0完成状态`
-- 已推送提交 hash：`593d4db47f4df7d2af5c08e417566b479f347e95`
-- 阶段 1 功能提交：`feat: 搭建前后端基础骨架`
-- 已推送提交 hash：`0b77ae2b68042936b2e2615459dbf4df2929a793`
+- 当前阶段 2 升级版已经完成并通过自测。
+- 下一步应在你验证通过后，进入 `阶段 3：合同 / 箱单上传与 AI Mock 识别`。
+- 在你确认前，不进入下一阶段，也不执行 Git 提交与推送。

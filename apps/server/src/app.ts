@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { healthRouter } from "./routes/health";
+import { setupRouter } from "./routes/setup";
 
 export function createApp() {
   const app = express();
@@ -16,6 +17,7 @@ export function createApp() {
   });
 
   app.use("/api", healthRouter);
+  app.use("/api/setup", setupRouter);
 
   return app;
 }
