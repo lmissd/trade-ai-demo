@@ -56,17 +56,17 @@
   - [x] 库存查询 `/inventory`
   - [x] 回款记录 `/payments`
   - [x] AI 问答 `/ai-assistant`
-- [ ] 1.5 阶段 1 完成后执行
+- [x] 1.5 阶段 1 完成后执行
   - [x] 前端可启动
   - [x] 后端可启动
   - [x] `/api/health` 正常返回
   - [x] 所有占位页面可以访问
   - [x] 更新 `PROJECT_MEMORY.md`
   - [x] 更新本 TODO 勾选状态
-  - [ ] `git add .`
-  - [ ] `git commit -m "feat: 搭建前后端基础骨架"`
-  - [ ] `git push`
-  - [ ] 停止，等待用户确认
+  - [x] `git add .`
+  - [x] `git commit -m "feat: 搭建前后端基础骨架"`
+  - [x] `git push`
+  - [x] 停止，等待用户确认
 
 ## 阶段 2：数据库与基础数据模型
 
