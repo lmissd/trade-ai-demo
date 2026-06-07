@@ -34,35 +34,35 @@
 
 ## 阶段 1：搭建前后端基础骨架
 
-- [ ] 1.1 创建前端项目
-  - [ ] 使用 React + Vite + TypeScript
-  - [ ] 安装 Ant Design
-  - [ ] 配置基础路由
-  - [ ] 创建基础布局：侧边栏、顶部栏、内容区
-- [ ] 1.2 创建后端项目
-  - [ ] 使用 Node.js + Express + TypeScript
-  - [ ] 配置基础启动命令
-  - [ ] 创建健康检查接口 `/api/health`
-- [ ] 1.3 创建统一启动方式
-  - [ ] 根目录配置 package scripts
-  - [ ] 支持同时启动前端和后端
-- [ ] 1.4 创建基础页面占位
-  - [ ] 首页看板 `/dashboard`
-  - [ ] 单据上传 `/documents`
-  - [ ] 合同管理 `/contracts`
-  - [ ] 批次管理 `/batches`
-  - [ ] 二维码管理 `/qr-items`
-  - [ ] 手机扫码 `/scan`
-  - [ ] 库存查询 `/inventory`
-  - [ ] 回款记录 `/payments`
-  - [ ] AI 问答 `/ai-assistant`
+- [x] 1.1 创建前端项目
+  - [x] 使用 React + Vite + TypeScript
+  - [x] 安装 Ant Design
+  - [x] 配置基础路由
+  - [x] 创建基础布局：侧边栏、顶部栏、内容区
+- [x] 1.2 创建后端项目
+  - [x] 使用 Node.js + Express + TypeScript
+  - [x] 配置基础启动命令
+  - [x] 创建健康检查接口 `/api/health`
+- [x] 1.3 创建统一启动方式
+  - [x] 根目录配置 package scripts
+  - [x] 支持同时启动前端和后端
+- [x] 1.4 创建基础页面占位
+  - [x] 首页看板 `/dashboard`
+  - [x] 单据上传 `/documents`
+  - [x] 合同管理 `/contracts`
+  - [x] 批次管理 `/batches`
+  - [x] 二维码管理 `/qr-items`
+  - [x] 手机扫码 `/scan`
+  - [x] 库存查询 `/inventory`
+  - [x] 回款记录 `/payments`
+  - [x] AI 问答 `/ai-assistant`
 - [ ] 1.5 阶段 1 完成后执行
-  - [ ] 前端可启动
-  - [ ] 后端可启动
-  - [ ] `/api/health` 正常返回
-  - [ ] 所有占位页面可以访问
-  - [ ] 更新 `PROJECT_MEMORY.md`
-  - [ ] 更新本 TODO 勾选状态
+  - [x] 前端可启动
+  - [x] 后端可启动
+  - [x] `/api/health` 正常返回
+  - [x] 所有占位页面可以访问
+  - [x] 更新 `PROJECT_MEMORY.md`
+  - [x] 更新本 TODO 勾选状态
   - [ ] `git add .`
   - [ ] `git commit -m "feat: 搭建前后端基础骨架"`
   - [ ] `git push`
