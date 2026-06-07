@@ -255,9 +255,9 @@ export function BatchesPage() {
       </Row>
 
       <Row gutter={[20, 20]} align="top">
-        <Col xs={24} xxl={14}>
+        <Col xs={24} xl={14}>
           <Card
-            className="placeholder-card"
+            className="placeholder-card document-table-card"
             title="批次列表"
             extra={
               <Button icon={<ReloadOutlined />} onClick={() => void loadBatches()}>
@@ -283,8 +283,8 @@ export function BatchesPage() {
           </Card>
         </Col>
 
-        <Col xs={24} xxl={10}>
-          <Card className="placeholder-card" title="批次详情" loading={isDetailLoading}>
+        <Col xs={24} xl={10}>
+          <Card className="placeholder-card document-detail-card" title="批次详情" loading={isDetailLoading}>
             {selectedBatchDetail && selectedBatch ? (
               <Space direction="vertical" size="large" style={{ width: "100%" }}>
                 <Descriptions

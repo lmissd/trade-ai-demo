@@ -24,9 +24,13 @@
 - 用途：查询已上传单据列表。
 - 当前返回：
   - 原始文件信息
+  - 生命周期状态 `status`
   - AI 识别状态
   - 草稿字段
+  - 是否已生成业务数据 `businessCreated`
+  - 替换关系与版本号
   - 是否已生成正式合同 / 批次
+ - 当前默认不返回已删除单据
 
 ### `POST /api/documents/upload`
 
@@ -65,6 +69,50 @@
   - 当前仍然只是在修正草稿数据
   - 还不会生成正式业务数据
 
+### `DELETE /api/documents/:id`
+
+- 用途：删除未生成业务数据的草稿单据。
+- 关键规则：
+  - 只允许删除 `businessCreated = false` 的单据
+  - 删除采用软删除，工作台不再显示
+  - 会写入 `AuditLog`
+  - 不影响任何库存数据
+  - 如果单据已生成业务数据，会拒绝并提示“该单据已生成业务数据，不能删除，只能作废”
+
+### `POST /api/documents/:id/void`
+
+- 用途：作废已生成业务数据的单据。
+- 请求体：
+  - `reason`
+- 关键规则：
+  - 必须填写作废原因
+  - 不删除原文件
+  - 不删除合同、批次、采购或应收数据
+  - 只更新 `Document.status = VOIDED`
+  - 会写入 `AuditLog`
+  - 不影响库存
+
+### `POST /api/documents/:id/replace`
+
+- 用途：上传同一业务单据的新版本。
+- 表单字段：
+  - `file`
+- 关键规则：
+  - 旧单据状态更新为 `REPLACED`
+  - 新单据成为当前有效版本
+  - 保留正式业务数据，不删除合同与批次
+  - 会写入 `AuditLog`
+
+### `GET /api/documents/:id/history`
+
+- 用途：查询同一单据链路下的版本历史。
+- 当前返回：
+  - 版本号
+  - 生命周期状态
+  - 原文件信息
+  - 业务状态
+  - 作废原因（若有）
+
 ### `POST /api/documents/:id/confirm`
 
 - 用途：用户确认识别草稿后，正式生成业务数据。
@@ -76,6 +124,7 @@
   - `PurchaseOrderItem`
   - `Payment`
   - `Receivable`
+  - 同时回写 `Document.businessCreated = true`
 - 关键规则：
   - 幂等：重复点击不会重复生成
   - 冲突校验：若合同号或批次号已被其他单据占用，会返回冲突错误

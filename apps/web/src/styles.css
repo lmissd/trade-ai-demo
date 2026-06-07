@@ -228,11 +228,21 @@ a {
   border: 1px solid rgba(23, 36, 58, 0.06) !important;
   background: rgba(255, 255, 255, 0.92) !important;
   box-shadow: 0 20px 60px rgba(23, 36, 58, 0.08);
+  overflow: hidden;
+}
+
+.placeholder-card .ant-card-head,
+.placeholder-card .ant-card-body {
+  min-width: 0;
 }
 
 .placeholder-card .ant-card-body {
   display: grid;
   gap: 20px;
+}
+
+.placeholder-card .ant-card-body > * {
+  min-width: 0;
 }
 
 .placeholder-meta {
@@ -280,6 +290,11 @@ a {
   gap: 20px;
 }
 
+.document-workspace .ant-row,
+.document-workspace .ant-col {
+  min-width: 0;
+}
+
 .document-summary-grid {
   display: grid;
   gap: 20px;
@@ -320,6 +335,27 @@ a {
 
 .documents-table-row-selected > td {
   background: rgba(197, 90, 17, 0.08) !important;
+}
+
+.document-table-card .ant-table-wrapper,
+.document-table-card .ant-table-container {
+  width: 100%;
+  min-width: 0;
+}
+
+.document-table-card .ant-table-content {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.document-table-card .ant-table-thead > tr > th,
+.document-table-card .ant-table-tbody > tr > td {
+  white-space: nowrap;
+}
+
+.document-detail-card {
+  position: relative;
+  z-index: 1;
 }
 
 .documents-notes {

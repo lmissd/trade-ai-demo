@@ -6,11 +6,12 @@ import {
   AiTaskType,
   BatchStatus,
   DocumentAiStatus,
+  DocumentStatus,
   DocumentType,
   PaymentStatus,
   Prisma
 } from "@prisma/client";
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { demoScenarioConfig } from "../config/demoScenario";
 import { env } from "../config/env";
@@ -21,6 +22,15 @@ fs.mkdirSync(documentsUploadDir, { recursive: true });
 
 const allowedDocumentTypes = new Set<string>(Object.values(DocumentType));
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+const replacementDocumentSelect = {
+  id: true,
+  fileName: true,
+  originalName: true,
+  status: true,
+  version: true,
+  createdAt: true
+} as const;
 
 const contractSummarySelect = {
   id: true,
@@ -56,12 +66,27 @@ const documentSelect = {
   fileUrl: true,
   mimeType: true,
   size: true,
+  status: true,
   aiStatus: true,
   extractedJson: true,
   contractNoDraft: true,
   batchNoDraft: true,
+  isDeleted: true,
+  deletedAt: true,
+  deletedBy: true,
+  voidedAt: true,
+  voidedBy: true,
+  voidReason: true,
+  replacedByDocumentId: true,
+  relatedEntityType: true,
+  relatedEntityId: true,
+  businessCreated: true,
+  version: true,
   createdAt: true,
   updatedAt: true,
+  replacedByDocument: {
+    select: replacementDocumentSelect
+  },
   sourceContracts: {
     select: contractSummarySelect
   },
@@ -167,6 +192,11 @@ type ConfirmedDocumentDraft = {
   currency: string;
 };
 
+type AuditActor = {
+  userId: string | null;
+  username: string | null;
+};
+
 class BusinessConflictError extends Error {}
 
 export const documentsRouter = Router();
@@ -214,11 +244,32 @@ function normalizeExtractedJson(extractedJson: Prisma.JsonValue | null | undefin
   } satisfies Prisma.JsonObject;
 }
 
+function hasGeneratedBusiness(document: {
+  businessCreated: boolean;
+  relatedEntityId: string | null;
+  sourceContracts: Array<unknown>;
+  sourceBatches: Array<unknown>;
+}) {
+  return (
+    document.businessCreated ||
+    document.relatedEntityId !== null ||
+    document.sourceContracts.length > 0 ||
+    document.sourceBatches.length > 0
+  );
+}
+
 function normalizeDocumentResponse(document: DocumentWithSummary) {
   return {
     ...document,
     originalName: decodePotentialMojibake(document.originalName),
-    extractedJson: normalizeExtractedJson(document.extractedJson)
+    extractedJson: normalizeExtractedJson(document.extractedJson),
+    businessCreated: hasGeneratedBusiness(document),
+    replacedByDocument: document.replacedByDocument
+      ? {
+          ...document.replacedByDocument,
+          originalName: decodePotentialMojibake(document.replacedByDocument.originalName)
+        }
+      : null
   };
 }
 
@@ -245,13 +296,17 @@ function buildMockExtraction(documentId: string, documentType: DocumentType): Pr
     notes: [
       "第一版使用 mock 识别结果。",
       "识别结果来源于当前 DemoConfig，可在人工确认后修改。",
-      "阶段 4 将基于这些草稿字段生成合同与批次。"
+      "正式业务数据创建前，单据仍然只是草稿。"
     ]
   };
 }
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readRouteId(value: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function readOptionalString(value: unknown, options?: { rejectQuestionMark?: boolean }) {
@@ -491,13 +546,166 @@ async function loadExistingGeneratedBusinessData(tx: Prisma.TransactionClient, d
   };
 }
 
+async function resolveAuditActor(tx: Prisma.TransactionClient | typeof prisma): Promise<AuditActor> {
+  const demoOwner = await tx.user.findUnique({
+    where: { username: "demo-owner" },
+    select: {
+      id: true,
+      username: true
+    }
+  });
+
+  return {
+    userId: demoOwner?.id ?? null,
+    username: demoOwner?.username ?? "demo-owner"
+  };
+}
+
+function readAuditContext(request: Request) {
+  return {
+    ip: request.ip ?? null,
+    userAgent: request.get("user-agent") ?? null
+  };
+}
+
+function toAuditJson(value: unknown): Prisma.InputJsonValue | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+async function writeAuditLog(
+  tx: Prisma.TransactionClient,
+  actor: AuditActor,
+  request: Request,
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  beforeJson?: unknown,
+  afterJson?: unknown
+) {
+  const context = readAuditContext(request);
+
+  await tx.auditLog.create({
+    data: {
+      userId: actor.userId,
+      username: actor.username,
+      action,
+      entityType,
+      entityId,
+      beforeJson: toAuditJson(beforeJson),
+      afterJson: toAuditJson(afterJson),
+      ip: context.ip,
+      userAgent: context.userAgent
+    }
+  });
+}
+
+function ensureActiveDocument(document: DocumentWithSummary) {
+  if (document.isDeleted || document.status === DocumentStatus.DELETED) {
+    throw new Error("该单据已删除，不能继续操作。");
+  }
+
+  if (document.status === DocumentStatus.VOIDED) {
+    throw new Error("该单据已作废，不能继续操作。");
+  }
+
+  if (document.status === DocumentStatus.REPLACED) {
+    throw new Error("该单据已被新版本替换，不能继续操作。");
+  }
+}
+
+function buildUploadFileMetadata(request: Request) {
+  if (!request.file) {
+    throw new Error("file is required.");
+  }
+
+  const relativeFilePath = path.posix.join("uploads", "documents", request.file.filename);
+  const relativeFileUrl = `/${relativeFilePath.replace(/\\/g, "/")}`;
+  const fileUrl = `${request.protocol}://${request.get("host")}${relativeFileUrl}`;
+
+  return {
+    fileName: request.file.filename,
+    originalName: decodePotentialMojibake(request.file.originalname),
+    filePath: relativeFilePath,
+    fileUrl,
+    mimeType: request.file.mimetype,
+    size: request.file.size
+  };
+}
+
+async function loadDocumentOr404(documentId: string, response: Response) {
+  const document = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: documentSelect
+  });
+
+  if (!document || document.isDeleted) {
+    response.status(404).json({ message: "Document not found." });
+    return null;
+  }
+
+  return document;
+}
+
 documentsRouter.get("/", async (_request, response) => {
   const documents = await prisma.document.findMany({
-    orderBy: { createdAt: "desc" },
+    where: { isDeleted: false },
+    orderBy: [{ createdAt: "desc" }],
     select: documentSelect
   });
 
   response.json(documents.map((document) => normalizeDocumentResponse(document)));
+});
+
+documentsRouter.get("/:id/history", async (request, response) => {
+  const documentId = readRouteId(request.params.id);
+  const requestedDocument = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: documentSelect
+  });
+
+  if (!requestedDocument || requestedDocument.isDeleted) {
+    response.status(404).json({ message: "Document not found." });
+    return;
+  }
+
+  let rootDocument = requestedDocument;
+
+  while (true) {
+    const previousVersion = await prisma.document.findFirst({
+      where: {
+        replacedByDocumentId: rootDocument.id
+      },
+      select: documentSelect
+    });
+
+    if (!previousVersion) {
+      break;
+    }
+
+    rootDocument = previousVersion;
+  }
+
+  const history: DocumentWithSummary[] = [];
+  let currentDocument: DocumentWithSummary | null = rootDocument;
+
+  while (currentDocument) {
+    history.push(currentDocument);
+
+    if (!currentDocument.replacedByDocumentId) {
+      break;
+    }
+
+    currentDocument = await prisma.document.findUnique({
+      where: { id: currentDocument.replacedByDocumentId },
+      select: documentSelect
+    });
+  }
+
+  response.json(history.map((document) => normalizeDocumentResponse(document)));
 });
 
 documentsRouter.post("/upload", upload.single("file"), async (request, response) => {
@@ -510,46 +718,260 @@ documentsRouter.post("/upload", upload.single("file"), async (request, response)
     return;
   }
 
-  if (!request.file) {
-    response.status(400).json({ message: "file is required." });
+  try {
+    const fileMetadata = buildUploadFileMetadata(request);
+    const document = await prisma.document.create({
+      data: {
+        documentType: documentTypeValue,
+        ...fileMetadata
+      },
+      select: documentSelect
+    });
+
+    response.status(201).json(normalizeDocumentResponse(document));
+  } catch (error) {
+    response.status(400).json({
+      message: error instanceof Error ? error.message : "file is required."
+    });
+  }
+});
+
+documentsRouter.delete("/:id", async (request, response) => {
+  const document = await loadDocumentOr404(readRouteId(request.params.id), response);
+
+  if (!document) {
     return;
   }
 
-  const relativeFilePath = path.posix.join("uploads", "documents", request.file.filename);
-  const relativeFileUrl = `/${relativeFilePath.replace(/\\/g, "/")}`;
-  const fileUrl = `${request.protocol}://${request.get("host")}${relativeFileUrl}`;
-  const originalName = decodePotentialMojibake(request.file.originalname);
+  if (hasGeneratedBusiness(document)) {
+    response.status(409).json({
+      message: "该单据已生成业务数据，不能删除，只能作废。"
+    });
+    return;
+  }
 
-  const document = await prisma.document.create({
-    data: {
-      documentType: documentTypeValue,
-      fileName: request.file.filename,
-      originalName,
-      filePath: relativeFilePath,
-      fileUrl,
-      mimeType: request.file.mimetype,
-      size: request.file.size
-    },
-    select: documentSelect
+  ensureActiveDocument(document);
+
+  const deletedAt = new Date();
+
+  const deletedDocument = await prisma.$transaction(async (tx) => {
+    const actor = await resolveAuditActor(tx);
+
+    const updatedDocument = await tx.document.update({
+      where: { id: document.id },
+      data: {
+        status: DocumentStatus.DELETED,
+        isDeleted: true,
+        deletedAt,
+        deletedBy: actor.username ?? actor.userId ?? "demo-owner"
+      },
+      select: documentSelect
+    });
+
+    await writeAuditLog(tx, actor, request, "DOCUMENT_DELETE", "Document", document.id, document, updatedDocument);
+
+    return updatedDocument;
   });
 
-  response.status(201).json(normalizeDocumentResponse(document));
+  response.json({
+    deleted: true,
+    document: normalizeDocumentResponse(deletedDocument)
+  });
+});
+
+documentsRouter.post("/:id/void", async (request, response) => {
+  const document = await loadDocumentOr404(readRouteId(request.params.id), response);
+
+  if (!document) {
+    return;
+  }
+
+  const voidReason = readOptionalString((request.body as { reason?: unknown } | undefined)?.reason);
+
+  if (!voidReason) {
+    response.status(400).json({ message: "作废时必须填写原因。" });
+    return;
+  }
+
+  if (!hasGeneratedBusiness(document)) {
+    response.status(409).json({
+      message: "该单据尚未生成业务数据，无需作废，可直接删除。"
+    });
+    return;
+  }
+
+  if (document.status === DocumentStatus.VOIDED) {
+    response.json({
+      voided: false,
+      document: normalizeDocumentResponse(document)
+    });
+    return;
+  }
+
+  if (document.status === DocumentStatus.REPLACED) {
+    response.status(409).json({
+      message: "该单据已经被新版本替换，不能再作废旧版本。"
+    });
+    return;
+  }
+
+  ensureActiveDocument(document);
+
+  const voidedAt = new Date();
+
+  const voidedDocument = await prisma.$transaction(async (tx) => {
+    const actor = await resolveAuditActor(tx);
+
+    const updatedDocument = await tx.document.update({
+      where: { id: document.id },
+      data: {
+        status: DocumentStatus.VOIDED,
+        voidedAt,
+        voidedBy: actor.username ?? actor.userId ?? "demo-owner",
+        voidReason
+      },
+      select: documentSelect
+    });
+
+    await writeAuditLog(tx, actor, request, "DOCUMENT_VOID", "Document", document.id, document, updatedDocument);
+
+    return updatedDocument;
+  });
+
+  response.json({
+    voided: true,
+    document: normalizeDocumentResponse(voidedDocument)
+  });
+});
+
+documentsRouter.post("/:id/replace", upload.single("file"), async (request, response) => {
+  const document = await loadDocumentOr404(readRouteId(request.params.id), response);
+
+  if (!document) {
+    return;
+  }
+
+  if (!hasGeneratedBusiness(document)) {
+    response.status(409).json({
+      message: "当前只有已生成业务数据的单据才允许替换版本。"
+    });
+    return;
+  }
+
+  ensureActiveDocument(document);
+
+  try {
+    const fileMetadata = buildUploadFileMetadata(request);
+    const relatedEntityType = document.relatedEntityType ?? "CONTRACT";
+    const relatedEntityId = document.relatedEntityId ?? document.sourceContracts[0]?.id ?? null;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const actor = await resolveAuditActor(tx);
+
+      const replacementDocument = await tx.document.create({
+        data: {
+          documentType: document.documentType,
+          ...fileMetadata,
+          aiStatus: document.aiStatus,
+          extractedJson: document.extractedJson ?? undefined,
+          contractNoDraft: document.contractNoDraft,
+          batchNoDraft: document.batchNoDraft,
+          relatedEntityType,
+          relatedEntityId,
+          businessCreated: true,
+          version: document.version + 1
+        },
+        select: documentSelect
+      });
+
+      await tx.document.update({
+        where: { id: document.id },
+        data: {
+          status: DocumentStatus.REPLACED,
+          replacedByDocumentId: replacementDocument.id
+        }
+      });
+
+      await Promise.all([
+        tx.contract.updateMany({
+          where: { sourceDocumentId: document.id },
+          data: { sourceDocumentId: replacementDocument.id }
+        }),
+        tx.batch.updateMany({
+          where: { sourceDocumentId: document.id },
+          data: { sourceDocumentId: replacementDocument.id }
+        })
+      ]);
+
+      const [previousDocument, currentDocument] = await Promise.all([
+        tx.document.findUnique({
+          where: { id: document.id },
+          select: documentSelect
+        }),
+        tx.document.findUnique({
+          where: { id: replacementDocument.id },
+          select: documentSelect
+        })
+      ]);
+
+      await writeAuditLog(
+        tx,
+        actor,
+        request,
+        "DOCUMENT_REPLACE",
+        "Document",
+        document.id,
+        document,
+        {
+          previousDocument,
+          replacementDocument: currentDocument
+        }
+      );
+
+      return {
+        previousDocument,
+        replacementDocument: currentDocument
+      };
+    });
+
+    response.status(201).json({
+      replaced: true,
+      previousDocument: result.previousDocument ? normalizeDocumentResponse(result.previousDocument) : null,
+      document: result.replacementDocument ? normalizeDocumentResponse(result.replacementDocument) : null
+    });
+  } catch (error) {
+    response.status(400).json({
+      message: error instanceof Error ? error.message : "file is required."
+    });
+  }
 });
 
 documentsRouter.post("/:id/extract", async (request, response) => {
-  const document = await prisma.document.findUnique({
-    where: { id: request.params.id },
-    select: documentSelect
-  });
+  const document = await loadDocumentOr404(readRouteId(request.params.id), response);
 
   if (!document) {
-    response.status(404).json({ message: "Document not found." });
+    return;
+  }
+
+  try {
+    ensureActiveDocument(document);
+  } catch (error) {
+    response.status(409).json({
+      message: error instanceof Error ? error.message : "当前单据不能继续识别。"
+    });
+    return;
+  }
+
+  if (hasGeneratedBusiness(document)) {
+    response.status(409).json({
+      message: "该单据已生成业务数据，不能重新识别。若需更新原始单据，请使用替换上传。"
+    });
     return;
   }
 
   const extraction = buildMockExtraction(document.id, document.documentType);
   const readableOriginalName = decodePotentialMojibake(document.originalName) ?? document.fileName;
-  const responseText = `已从 ${readableOriginalName} 识别出合同草稿、批次草稿和演示场景字段。`;
+  const responseText = `已从 ${readableOriginalName} 识别出合同草稿、批次草稿和演示字段。`;
 
   const [updatedDocument] = await prisma.$transaction([
     prisma.document.update({
@@ -588,17 +1010,22 @@ documentsRouter.post("/:id/extract", async (request, response) => {
 });
 
 documentsRouter.patch("/:id/extracted-fields", async (request, response) => {
-  const document = await prisma.document.findUnique({
-    where: { id: request.params.id },
-    select: documentSelect
-  });
+  const document = await loadDocumentOr404(readRouteId(request.params.id), response);
 
   if (!document) {
-    response.status(404).json({ message: "Document not found." });
     return;
   }
 
   try {
+    ensureActiveDocument(document);
+
+    if (hasGeneratedBusiness(document)) {
+      response.status(409).json({
+        message: "该单据已生成正式业务数据，不能再编辑识别草稿。"
+      });
+      return;
+    }
+
     const { patch, contractNoDraft, batchNoDraft } = buildExtractionPatch(request.body);
     const existing =
       document.extractedJson && typeof document.extractedJson === "object" && !Array.isArray(document.extractedJson)
@@ -633,13 +1060,18 @@ documentsRouter.patch("/:id/extracted-fields", async (request, response) => {
 });
 
 documentsRouter.post("/:id/confirm", async (request, response) => {
-  const document = await prisma.document.findUnique({
-    where: { id: request.params.id },
-    select: documentSelect
-  });
+  const document = await loadDocumentOr404(readRouteId(request.params.id), response);
 
   if (!document) {
-    response.status(404).json({ message: "Document not found." });
+    return;
+  }
+
+  try {
+    ensureActiveDocument(document);
+  } catch (error) {
+    response.status(409).json({
+      message: error instanceof Error ? error.message : "当前单据不能生成业务数据。"
+    });
     return;
   }
 
@@ -655,6 +1087,16 @@ documentsRouter.post("/:id/confirm", async (request, response) => {
       const existing = await loadExistingGeneratedBusinessData(tx, document.id);
 
       if (existing) {
+        await tx.document.update({
+          where: { id: document.id },
+          data: {
+            businessCreated: true,
+            relatedEntityType: document.relatedEntityType ?? "CONTRACT",
+            relatedEntityId: document.relatedEntityId ?? existing.contract.id,
+            status: DocumentStatus.ACTIVE
+          }
+        });
+
         return {
           created: false,
           ...existing
@@ -797,6 +1239,16 @@ documentsRouter.post("/:id/confirm", async (request, response) => {
           status: "UNPAID"
         },
         select: generatedReceivableSelect
+      });
+
+      await tx.document.update({
+        where: { id: document.id },
+        data: {
+          businessCreated: true,
+          relatedEntityType: "CONTRACT",
+          relatedEntityId: contract.id,
+          status: DocumentStatus.ACTIVE
+        }
       });
 
       return {

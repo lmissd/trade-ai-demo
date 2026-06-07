@@ -298,6 +298,49 @@ Demo 1.5 包括：
 - 允许人工确认和修正字段
 - 确认后生成合同和批次
 
+同时要补齐单据生命周期治理：
+
+- 草稿单据允许删除
+- 已生成正式业务数据的单据禁止删除
+- 已生成正式业务数据的单据只允许作废、替换或归档
+- 删除、作废、替换都必须进入审计日志
+- 单据状态变化不能反向影响库存
+
+### 4.2.1 单据删除、作废与版本管理
+
+第一版单据治理遵循以下规则：
+
+1. 单据上传后，先进入 `Document` 草稿层。
+2. `Document.extractedJson` 只是识别草稿，不直接等于正式业务数据。
+3. 只有点击“确认生成业务数据”后，才会创建 `Contract`、`ContractItem`、`Batch`、`PurchaseOrder`、`Payment / Receivable`。
+4. 未生成正式业务数据的单据允许删除。
+5. 已生成正式业务数据的单据禁止物理删除，只能作废、替换或归档。
+6. 删除、作废、替换都必须写入 `AuditLog`。
+7. 删除、作废、替换都不能删除合同、批次、二维码、库存流水，也不能改变库存。
+8. 库存始终只由 `QrItem.status` 与 `StockMovement` 决定，不因单据删除或作废而变化。
+
+第一版建议的 `Document` 生命周期字段包括：
+
+- `status`
+- `isDeleted`
+- `deletedAt`
+- `deletedBy`
+- `voidedAt`
+- `voidedBy`
+- `voidReason`
+- `replacedByDocumentId`
+- `relatedEntityType`
+- `relatedEntityId`
+- `businessCreated`
+- `version`
+
+第一版生命周期操作：
+
+- 删除：仅针对未生成业务数据的草稿单据，默认采用软删除并隐藏出工作台。
+- 作废：针对已生成业务数据的单据，只把 `Document.status` 更新为 `VOIDED`，保留原文件与业务数据。
+- 替换：上传新版本单据，旧单据状态变为 `REPLACED`，新单据成为当前有效版本。
+- 历史：可以查看同一单据链路下的版本演进。
+
 ### 4.3 采购与境内集货模块
 
 展示流程：
@@ -630,6 +673,7 @@ AI 角色：
 
 - User
 - Document
+- AuditLog
 - Contract
 - Batch
 - QrItem

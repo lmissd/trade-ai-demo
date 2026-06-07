@@ -65,6 +65,15 @@
   - [x] 上传 -> 识别 -> 保存 -> 回读链路
   - [x] 中文文件名上传验证
   - [x] TypeScript 无报错
+- [x] 阶段 3 补充：单据删除、作废与版本管理
+  - [x] 扩展 `Document` 生命周期字段与 `businessCreated`
+  - [x] 删除草稿接口 `DELETE /api/documents/:id`
+  - [x] 作废接口 `POST /api/documents/:id/void`
+  - [x] 替换接口 `POST /api/documents/:id/replace`
+  - [x] 历史接口 `GET /api/documents/:id/history`
+  - [x] 删除 / 作废 / 替换写入 `AuditLog`
+  - [x] 前端按状态显示删除、作废、替换、历史按钮
+  - [x] 验证删除 / 作废不会影响 `QrItem` 与 `StockMovement`
 - [x] 用户确认后执行 `git add .`
 - [x] 用户确认后执行 `git commit -m "feat: 完成合同单据上传和AI模拟识别"`
 - [x] 用户确认后执行 `git push`

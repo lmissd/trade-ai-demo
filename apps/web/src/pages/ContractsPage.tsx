@@ -298,9 +298,9 @@ export function ContractsPage() {
       </Row>
 
       <Row gutter={[20, 20]} align="top">
-        <Col xs={24} xxl={14}>
+        <Col xs={24} xl={14}>
           <Card
-            className="placeholder-card"
+            className="placeholder-card document-table-card"
             title="合同列表"
             extra={
               <Button icon={<ReloadOutlined />} onClick={() => void loadContracts()}>
@@ -326,8 +326,8 @@ export function ContractsPage() {
           </Card>
         </Col>
 
-        <Col xs={24} xxl={10}>
-          <Card className="placeholder-card" title="合同详情" loading={isDetailLoading}>
+        <Col xs={24} xl={10}>
+          <Card className="placeholder-card document-detail-card" title="合同详情" loading={isDetailLoading}>
             {selectedContractDetail && selectedContract ? (
               <Space direction="vertical" size="large" style={{ width: "100%" }}>
                 <Descriptions

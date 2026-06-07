@@ -28,6 +28,14 @@ enum DocumentAiStatus {
   FAILED
 }
 
+enum DocumentStatus {
+  ACTIVE
+  VOIDED
+  REPLACED
+  ARCHIVED
+  DELETED
+}
+
 enum ContractStatus {
   DRAFT
   CONFIRMED
@@ -272,23 +280,37 @@ model DemoConfig {
 }
 
 model Document {
-  id              String           @id @default(cuid())
-  documentType    DocumentType
-  fileName        String
-  originalName    String?
-  filePath        String?
-  fileUrl         String?
-  mimeType        String?
-  size            Int?
-  aiStatus        DocumentAiStatus @default(PENDING)
-  extractedJson   Json?
-  contractNoDraft String?
-  batchNoDraft    String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  aiLogs          AiLog[]
-  sourceContracts Contract[]
-  sourceBatches   Batch[]
+  id                   String           @id @default(cuid())
+  documentType         DocumentType
+  fileName             String
+  originalName         String?
+  filePath             String?
+  fileUrl              String?
+  mimeType             String?
+  size                 Int?
+  status               DocumentStatus   @default(ACTIVE)
+  aiStatus             DocumentAiStatus @default(PENDING)
+  extractedJson        Json?
+  contractNoDraft      String?
+  batchNoDraft         String?
+  isDeleted            Boolean          @default(false)
+  deletedAt            DateTime?
+  deletedBy            String?
+  voidedAt             DateTime?
+  voidedBy             String?
+  voidReason           String?
+  replacedByDocumentId String?
+  relatedEntityType    String?
+  relatedEntityId      String?
+  businessCreated      Boolean          @default(false)
+  version              Int              @default(1)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  replacedByDocument   Document?        @relation("DocumentReplacement", fields: [replacedByDocumentId], references: [id])
+  previousVersions     Document[]       @relation("DocumentReplacement")
+  aiLogs               AiLog[]
+  sourceContracts      Contract[]
+  sourceBatches        Batch[]
 }
 
 model Contract {

@@ -38,30 +38,32 @@
 - 阶段 3：已完成，且已提交并推送
   - Commit: `35f6952`
   - Message: `feat: 完成合同单据上传和AI模拟识别`
+  - 补充设计与实现：单据删除、作废、替换与版本历史已落地
 - 阶段 4：已完成，可进入下一阶段
 
 ## 当前数据库状态
 
-阶段 4 自测后，数据库关键计数为：
+本次“单据生命周期治理”补充完成后，数据库关键计数为：
 
-- `documents = 4`
-- `contracts = 1`
-- `contractItems = 1`
-- `batches = 1`
-- `purchaseOrders = 1`
-- `purchaseOrderItems = 1`
-- `payments = 1`
-- `receivables = 1`
+- `documents = 7`
+- `contracts = 2`
+- `contractItems = 2`
+- `batches = 2`
+- `purchaseOrders = 2`
+- `purchaseOrderItems = 2`
+- `payments = 2`
+- `receivables = 2`
 - `qrItems = 0`
 - `stockMovements = 0`
 - `inventorySnapshots = 0`
-- `aiLogs = 4`
+- `aiLogs = 6`
+- `auditLogs = 3`
 - `demoConfigs = 1`
 
 这说明当前系统已经进入：
 
 - 单据草稿识别层：已完成
-- 正式业务数据层：已完成第一版
+- 正式业务数据层：已完成第一版，且补齐了单据生命周期治理
 - 二维码与库存层：尚未开始
 
 ## 阶段 3 已完成内容
@@ -74,6 +76,23 @@
 - 前端展示识别结果与人工修正
 - 中文文件名乱码兼容修复
 - 历史 `unit = ?` 草稿兼容修复
+
+阶段 3 补充后，新增规则：
+
+- 草稿单据允许删除
+- 已生成正式业务数据的单据禁止删除，只能作废、替换或归档
+- 删除、作废、替换都会写入 `AuditLog`
+- 单据删除、作废、替换都不会反向影响库存
+- 单据识别结果只是草稿，人工确认后才是正式业务依据
+
+阶段 3 补充后，新增能力：
+
+- `Document` 已增加生命周期字段：`status`、`isDeleted`、`deletedAt`、`deletedBy`、`voidedAt`、`voidedBy`、`voidReason`、`replacedByDocumentId`、`relatedEntityType`、`relatedEntityId`、`businessCreated`、`version`
+- 已实现 `DELETE /api/documents/:id`
+- 已实现 `POST /api/documents/:id/void`
+- 已实现 `POST /api/documents/:id/replace`
+- 已实现 `GET /api/documents/:id/history`
+- 前端单据页已按状态展示删除、作废、替换与历史按钮
 
 ## 阶段 4 已完成内容
 
@@ -226,6 +245,22 @@
 - 还没有生成 `QrItem`
 - 还没有扫码入库
 - 还没有库存流水
+
+本次还额外留下了一组生命周期自测样例：
+
+- `tmp-lifecycle-original.txt`：旧版本，状态已变为 `REPLACED`
+- `tmp-lifecycle-replacement.txt`：新版本，状态已变为 `VOIDED`
+- 历史链路已验证为 `V1:REPLACED -> V2:VOIDED`
+- 草稿删除自测样例已成功删除，并且不会出现在 `GET /api/documents` 返回中
+
+本次自测已明确验证：
+
+- 删除草稿后，`documents` 工作台列表不再显示该单据
+- 替换后，旧单据状态会变为 `REPLACED`
+- 作废后，当前有效版本状态会变为 `VOIDED`
+- `qrItems = 0`
+- `stockMovements = 0`
+- 说明删除 / 作废 / 替换没有误改库存层
 
 ## 剩余注意事项
 
