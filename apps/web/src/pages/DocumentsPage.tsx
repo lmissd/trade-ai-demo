@@ -362,6 +362,7 @@ export function DocumentsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirmingBusinessData, setIsConfirmingBusinessData] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isVoiding, setIsVoiding] = useState(false);
   const [isReplacing, setIsReplacing] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -369,6 +370,7 @@ export function DocumentsPage() {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [extractingDocumentId, setExtractingDocumentId] = useState<string | null>(null);
   const [latestBusinessResult, setLatestBusinessResult] = useState<ConfirmBusinessDataResponse | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DocumentRecord | null>(null);
   const [voidTarget, setVoidTarget] = useState<DocumentRecord | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<DocumentRecord | null>(null);
   const [replaceFileList, setReplaceFileList] = useState<UploadFile[]>([]);
@@ -532,31 +534,32 @@ export function DocumentsPage() {
     }
   }
 
-  function openDeleteConfirm(document: DocumentRecord) {
-    Modal.confirm({
-      title: "删除这份单据？",
-      content: "当前单据还没有生成正式业务数据，删除后会从工作台列表中移除，并写入审计日志。",
-      okText: "确认删除",
-      okButtonProps: { danger: true },
-      cancelText: "取消",
-      onOk: async () => {
-        try {
-          const result = await requestJson<DocumentMutationResponse>(`/api/documents/${document.id}`, {
-            method: "DELETE"
-          });
+  function openDeleteModal(document: DocumentRecord) {
+    setDeleteTarget(document);
+  }
 
-          removeDocument(document.id);
-          setLatestBusinessResult(null);
-          message.success("单据已删除。");
+  async function handleDeleteSubmit() {
+    if (!deleteTarget) {
+      return;
+    }
 
-          if (result.document?.id === selectedDocumentId) {
-            void loadDocuments();
-          }
-        } catch (error) {
-          message.error(error instanceof Error ? error.message : "删除失败。");
-        }
-      }
-    });
+    setIsDeleting(true);
+
+    try {
+      await requestJson<DocumentMutationResponse>(`/api/documents/${deleteTarget.id}`, {
+        method: "DELETE"
+      });
+
+      removeDocument(deleteTarget.id);
+      setLatestBusinessResult(null);
+      setDeleteTarget(null);
+      message.success("单据已删除。");
+      await loadDocuments();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "删除失败。");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   function openVoidModal(document: DocumentRecord) {
@@ -750,7 +753,14 @@ export function DocumentsPage() {
           </Button>
 
           {record.status === "REPLACED" ? (
-            <Button size="small" icon={<HistoryOutlined />} onClick={() => void openHistoryModal(record)}>
+            <Button
+              size="small"
+              icon={<HistoryOutlined />}
+              onClick={(event) => {
+                event.stopPropagation();
+                void openHistoryModal(record);
+              }}
+            >
               查看历史
             </Button>
           ) : null}
@@ -761,7 +771,10 @@ export function DocumentsPage() {
               type="primary"
               icon={<RobotOutlined />}
               loading={extractingDocumentId === record.id}
-              onClick={() => void handleExtract(record.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleExtract(record.id);
+              }}
             >
               {record.aiStatus === "EXTRACTED" ? "重新识别" : "AI 识别"}
             </Button>
@@ -772,7 +785,10 @@ export function DocumentsPage() {
               size="small"
               icon={<CheckCircleOutlined />}
               loading={isConfirmingBusinessData && selectedDocument?.id === record.id}
-              onClick={() => void handleConfirmBusinessData(record.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleConfirmBusinessData(record.id);
+              }}
             >
               确认生成业务
             </Button>
@@ -783,7 +799,10 @@ export function DocumentsPage() {
               size="small"
               danger
               icon={<DeleteOutlined />}
-              onClick={() => openDeleteConfirm(record)}
+              onClick={(event) => {
+                event.stopPropagation();
+                openDeleteModal(record);
+              }}
             >
               删除
             </Button>
@@ -794,20 +813,37 @@ export function DocumentsPage() {
               size="small"
               danger
               icon={<StopOutlined />}
-              onClick={() => openVoidModal(record)}
+              onClick={(event) => {
+                event.stopPropagation();
+                openVoidModal(record);
+              }}
             >
               作废
             </Button>
           ) : null}
 
           {canReplaceDocument(record) ? (
-            <Button size="small" icon={<SwapOutlined />} onClick={() => openReplaceModal(record)}>
+            <Button
+              size="small"
+              icon={<SwapOutlined />}
+              onClick={(event) => {
+                event.stopPropagation();
+                openReplaceModal(record);
+              }}
+            >
               替换
             </Button>
           ) : null}
 
           {record.fileUrl ? (
-            <Button size="small" href={resolveApiUrl(record.fileUrl)} target="_blank">
+            <Button
+              size="small"
+              href={resolveApiUrl(record.fileUrl)}
+              target="_blank"
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
               原文件
             </Button>
           ) : null}
@@ -1041,7 +1077,7 @@ export function DocumentsPage() {
                     <Button
                       danger
                       icon={<DeleteOutlined />}
-                      onClick={() => openDeleteConfirm(selectedDocument)}
+                      onClick={() => openDeleteModal(selectedDocument)}
                     >
                       删除单据
                     </Button>
@@ -1345,6 +1381,50 @@ export function DocumentsPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="删除单据"
+        open={Boolean(deleteTarget)}
+        onCancel={() => {
+          setDeleteTarget(null);
+        }}
+        onOk={() => void handleDeleteSubmit()}
+        confirmLoading={isDeleting}
+        okText="确认删除"
+        okButtonProps={{ danger: true }}
+        cancelText="取消"
+      >
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Alert
+            type="warning"
+            showIcon
+            message="只允许删除尚未生成业务数据的草稿单据"
+            description="删除后这份草稿会从单据列表中移除，并写入 AuditLog。已经生成合同、批次、采购单或应收草稿的单据不能删除，只能作废或替换。"
+          />
+          <Descriptions
+            bordered
+            size="small"
+            column={1}
+            items={[
+              {
+                key: "fileName",
+                label: "单据名称",
+                children: deleteTarget ? deleteTarget.originalName ?? deleteTarget.fileName : "-"
+              },
+              {
+                key: "documentType",
+                label: "单据类型",
+                children: deleteTarget ? documentTypeLabelMap[deleteTarget.documentType] : "-"
+              },
+              {
+                key: "createdAt",
+                label: "上传时间",
+                children: deleteTarget ? formatDateTime(deleteTarget.createdAt) : "-"
+              }
+            ]}
+          />
+        </Space>
+      </Modal>
 
       <Modal
         title="作废单据"
