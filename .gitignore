@@ -37,3 +37,6 @@ generated_qr/*
 .vite/
 .turbo/
 .cache/
+
+# Local runtime config
+.runtime/

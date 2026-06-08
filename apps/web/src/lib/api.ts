@@ -14,7 +14,10 @@ async function readErrorMessage(response: Response) {
 }
 
 export async function requestJson<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`${API_BASE_URL}${path}`, init);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    cache: "no-store",
+    ...init
+  });
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));

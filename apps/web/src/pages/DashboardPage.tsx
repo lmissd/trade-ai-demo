@@ -1,59 +1,772 @@
-import { ApiOutlined, BarChartOutlined, CheckCircleOutlined } from "@ant-design/icons";
-import { Button, Card, Space, Typography } from "antd";
-import { FeaturePlaceholder } from "../components/FeaturePlaceholder";
+import {
+  ApiOutlined,
+  ArrowRightOutlined,
+  CheckCircleOutlined,
+  ReloadOutlined,
+  RobotOutlined
+} from "@ant-design/icons";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Empty,
+  List,
+  Progress,
+  Row,
+  Select,
+  Skeleton,
+  Space,
+  Statistic,
+  Tag,
+  Timeline,
+  Typography,
+  message
+} from "antd";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { requestJson } from "../lib/api";
+
+type DashboardTone = "success" | "processing" | "warning" | "default" | "error";
+type DashboardOrderView = "active" | "completed" | "after_sales" | "exception" | "archived" | "all";
+
+type DashboardOverviewResponse = {
+  generatedAt: string;
+  scenario: {
+    scenarioName: string;
+    origin: string;
+    destinationWarehouse: string;
+    customerName: string;
+    supplierName: string;
+    productName: string;
+    totalQuantity: number;
+    unit: string;
+    plannedOutboundQuantity: number;
+    amount: number;
+    currency: string;
+  };
+  assistant: {
+    llmEnabled: boolean;
+    mode: "llm" | "template";
+    source: "runtime" | "env" | "template";
+    provider: string;
+    model: string | null;
+  };
+  counts: {
+    documents: number;
+    draftDocuments: number;
+    businessDocuments: number;
+    contracts: number;
+    batches: number;
+    qrItems: number;
+    stockMovements: number;
+    aiLogs: number;
+    workOrdersInDatabase: number;
+  };
+  finance: {
+    unpaidCount: number;
+    unpaidAmount: number;
+    currency: string;
+  };
+  orderView: DashboardOrderView;
+  orderPools: Array<{
+    key: DashboardOrderView;
+    label: string;
+    count: number;
+    description: string;
+  }>;
+  availableContracts: Array<{
+    contractId: string;
+    contractNo: string;
+    customerName: string;
+    totalQuantity: number;
+    unit: string;
+    batchCount: number;
+    hasQrItems: boolean;
+    totalQrItems: number;
+    inTransitInventory: number;
+    realtimeInventory: number;
+    outboundQuantity: number;
+    unpaidAmount: number;
+    mainFlowStatus: string;
+    mainFlowStatusText: string;
+    mainFlowTone: DashboardTone;
+    afterSalesStatus: string;
+    afterSalesStatusText: string;
+    afterSalesTone: DashboardTone;
+    exceptionStatus: string;
+    exceptionStatusText: string;
+    exceptionTone: DashboardTone;
+    archiveStatus: string;
+    archiveStatusText: string;
+    archiveTone: DashboardTone;
+    dashboardGroupKey: Exclude<DashboardOrderView, "all">;
+  }>;
+  focus: {
+    contractId: string | null;
+    contractNo: string | null;
+    customerName: string | null;
+    contractQuantity: number | null;
+    unit: string | null;
+    batchCount: number;
+    hasQrItems: boolean;
+    batchId: string | null;
+    batchNo: string | null;
+    warehouseName: string | null;
+    productName: string | null;
+    mainFlowStatus: string | null;
+    mainFlowStatusText: string | null;
+    mainFlowTone: DashboardTone | null;
+    afterSalesStatus: string | null;
+    afterSalesStatusText: string | null;
+    afterSalesTone: DashboardTone | null;
+    exceptionStatus: string | null;
+    exceptionStatusText: string | null;
+    exceptionTone: DashboardTone | null;
+    archiveStatus: string | null;
+    archiveStatusText: string | null;
+    archiveTone: DashboardTone | null;
+  };
+  execution: {
+    totalQuantity: number;
+    unit: string;
+    inboundCompleted: number;
+    inboundPending: number;
+    inboundProgressPercent: number;
+    outboundTarget: number;
+    outboundCompleted: number;
+    outboundRemaining: number;
+    outboundProgressPercent: number;
+  };
+  inventory: {
+    totalQrItems: number;
+    inTransitInventory: number;
+    realtimeInventory: number;
+    availableInventory: number;
+    frozenInventory: number;
+    outboundQuantity: number;
+    damagedQuantity: number;
+    lostQuantity: number;
+    abnormalQuantity: number;
+    totalInboundMovements: number;
+    totalOutboundMovements: number;
+    statusAccountedQuantity: number;
+    isConsistent: boolean;
+  };
+  statusCards: Array<{
+    key: string;
+    title: string;
+    statusText: string;
+    tone: DashboardTone;
+    metricLabel: string;
+    metricValue: string;
+    description: string;
+    routePath: string;
+  }>;
+  recentTasks: Array<{
+    id: string;
+    title: string;
+    owner: string;
+    reference: string;
+    statusText: string;
+    tone: DashboardTone;
+    description: string;
+    routePath: string;
+  }>;
+  recentActivities: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    occurredAt: string;
+    tone: DashboardTone;
+    description: string;
+    routePath: string;
+  }>;
+};
+
+const toneColorMap: Record<DashboardTone, string> = {
+  success: "success",
+  processing: "processing",
+  warning: "warning",
+  default: "default",
+  error: "error"
+};
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("zh-CN", {
+    hour12: false
+  });
+}
 
 export function DashboardPage() {
-  return (
-    <>
-      <FeaturePlaceholder
-        icon={<BarChartOutlined />}
-        title="国际贸易 ERP 首页驾驶舱"
-        description="这里是老板视角的总入口，用来串联核心真实闭环、外围成熟模块状态和当前演示环境的基础概览。"
-        badges={["14 项 ERP 菜单", "老板视角入口", "双击 BAT 可预览"]}
-        stats={[
-          { label: "核心真实闭环", value: "8 步" },
-          { label: "成熟展示模块", value: "10 个" },
-          { label: "菜单入口", value: "14 页" },
-          { label: "默认预览页", value: "/dashboard" }
-        ]}
-        bullets={[
-          "后续这里会同时展示真实库存统计、二维码状态、工单提醒和外围模块推进状态。",
-          "当前页面已经承担完整国际贸易 ERP Demo 的总入口角色，而不再只是临时骨架。",
-          "库存和二维码相关数字后续仍必须来自真实状态统计，不能把 80 箱写死在页面或 AI 答案里。"
-        ]}
-      />
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [data, setData] = useState<DashboardOverviewResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const focusContractId = searchParams.get("focusContractId");
+  const orderView = (searchParams.get("orderView") as DashboardOrderView | null) ?? null;
 
-      <Card className="placeholder-card" style={{ marginTop: 24 }}>
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+  async function loadDashboardOverview() {
+    setLoading(true);
+
+    try {
+      const query = new URLSearchParams();
+      if (focusContractId) {
+        query.set("focusContractId", focusContractId);
+      }
+      if (orderView) {
+        query.set("orderView", orderView);
+      }
+
+      const nextData = await requestJson<DashboardOverviewResponse>(
+        `/api/dashboard/overview${query.size > 0 ? `?${query.toString()}` : ""}`
+      );
+      setData(nextData);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载首页驾驶舱失败。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadDashboardOverview();
+  }, [focusContractId, orderView]);
+
+  const inventoryCards = data
+    ? [
+        { label: "在途库存", value: data.inventory.inTransitInventory, suffix: "箱" },
+        { label: "实时库存", value: data.inventory.realtimeInventory, suffix: "箱" },
+        { label: "可用库存", value: data.inventory.availableInventory, suffix: "箱" },
+        { label: "已出库", value: data.inventory.outboundQuantity, suffix: "箱" },
+        { label: "累计入库流水", value: data.inventory.totalInboundMovements, suffix: "次" },
+        { label: "累计出库流水", value: data.inventory.totalOutboundMovements, suffix: "次" }
+      ]
+    : [];
+
+  const selectedContractLabel = data?.focus.contractNo
+    ? `${data.focus.contractNo}${data.focus.customerName ? ` | ${data.focus.customerName}` : ""}`
+    : "待选择";
+  const activeOrderPool = data?.orderPools.find((item) => item.key === data.orderView) ?? null;
+  const hasFocusedOrder = Boolean(data?.focus.contractId);
+
+  return (
+    <div className="dashboard-workspace">
+      <section className="page-hero dashboard-hero">
+        <div className="dashboard-hero-main">
           <div className="placeholder-meta">
             <span className="placeholder-icon">
               <ApiOutlined />
             </span>
             <div>
-              <Typography.Title level={4} style={{ margin: 0 }}>
-                系统基础状态
-              </Typography.Title>
-              <Typography.Paragraph style={{ marginBottom: 0 }}>
-                这里展示服务连通、数据库初始化和默认演示场景配置，方便确认当前演示环境是否已经就绪。
+              <Typography.Title level={2}>国际贸易 ERP 首页驾驶舱</Typography.Title>
+              <Typography.Paragraph>
+                首页现在已经切换为老板视角总览。真实库存和扫码执行数据来自当前二维码状态与库存流水，
+                采购、回款、AI 助手和演示场景则在这里被串成一条完整的 ERP 演示主线。
               </Typography.Paragraph>
             </div>
           </div>
 
-          <Space wrap>
-            <Button
-              type="primary"
-              icon={<CheckCircleOutlined />}
-              href="http://127.0.0.1:3001/api/setup/status"
-              target="_blank"
-            >
-              查看系统状态
-            </Button>
-            <Button href="http://127.0.0.1:3001/api/health" target="_blank">
-              查看服务状态
-            </Button>
+          <Space wrap className="placeholder-badges">
+            <Tag color="blue">核心链路真实</Tag>
+            <Tag color="gold">外围模块成熟展示</Tag>
+            <Tag color="green">库存来自二维码状态</Tag>
+            <Tag color="cyan">{activeOrderPool?.label ?? "进行中订单"}</Tag>
+            <Tag color={data?.assistant.llmEnabled ? "success" : "default"}>
+              {data?.assistant.llmEnabled ? "升级版 AI 已启用" : "本地模板 AI"}
+            </Tag>
           </Space>
-        </Space>
-      </Card>
-    </>
+        </div>
+
+        <div className="dashboard-hero-side">
+          <Card className="dashboard-scenario-card" bordered={false}>
+            {data ? (
+              <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                <div>
+                  <Typography.Text type="secondary">当前演示场景</Typography.Text>
+                  <Typography.Title level={4} style={{ marginTop: 6, marginBottom: 0 }}>
+                    {data.scenario.scenarioName}
+                  </Typography.Title>
+                </div>
+
+                <div className="dashboard-focus-picker">
+                  <span className="app-header-panel-label">订单池视角</span>
+                  <Select
+                    className="dashboard-focus-select"
+                    value={data.orderView}
+                    onChange={(value) => {
+                      const next = new URLSearchParams(searchParams);
+                      next.set("orderView", value);
+                      next.delete("focusContractId");
+                      setSearchParams(next);
+                    }}
+                    options={data.orderPools.map((pool) => ({
+                      value: pool.key,
+                      label: `${pool.label} (${pool.count})`
+                    }))}
+                    placeholder="选择首页默认查看的订单池"
+                  />
+                </div>
+
+                <div className="dashboard-focus-picker">
+                  <span className="app-header-panel-label">主合同视角</span>
+                  <Select
+                    className="dashboard-focus-select"
+                    value={data.focus.contractId ?? undefined}
+                    onChange={(value) => {
+                      const next = new URLSearchParams(searchParams);
+                      if (value) {
+                        next.set("focusContractId", value);
+                      } else {
+                        next.delete("focusContractId");
+                      }
+                      if (!next.get("orderView") && data.orderView) {
+                        next.set("orderView", data.orderView);
+                      }
+                      setSearchParams(next);
+                    }}
+                    options={data.availableContracts.map((contract) => ({
+                      value: contract.contractId,
+                      label: `${contract.contractNo} | ${contract.customerName} | ${contract.mainFlowStatusText}`
+                    }))}
+                    placeholder="选择要重点展示的合同"
+                  />
+                </div>
+
+                <div className="dashboard-mini-grid">
+                  <div>
+                    <span className="app-header-panel-label">商品</span>
+                    <strong>{hasFocusedOrder ? data.focus.productName ?? data.scenario.productName : "当前池暂无订单"}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">目的仓库</span>
+                    <strong>
+                      {hasFocusedOrder ? data.focus.warehouseName ?? data.scenario.destinationWarehouse : "当前池暂无订单"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">主合同</span>
+                    <strong>{selectedContractLabel}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">主批次</span>
+                    <strong>{data.focus.batchNo ?? "待生成"}</strong>
+                  </div>
+                </div>
+
+                <div className="dashboard-focus-note">
+                  {!hasFocusedOrder
+                    ? `${activeOrderPool?.label ?? "当前订单池"}：当前没有可展示的订单，首页已保留全局库存与模块总览。`
+                    : activeOrderPool
+                    ? `${activeOrderPool.label}：${activeOrderPool.description}`
+                    : "首页默认优先查看进行中的订单，减少已完成订单对驾驶舱的干扰。"}
+                </div>
+
+                <Button icon={<ReloadOutlined />} onClick={() => void loadDashboardOverview()} loading={loading}>
+                  刷新驾驶舱
+                </Button>
+              </Space>
+            ) : (
+              <Skeleton active paragraph={{ rows: 5 }} />
+            )}
+          </Card>
+        </div>
+      </section>
+
+      <Alert
+        type={data?.inventory.isConsistent === false ? "warning" : "success"}
+        showIcon
+        message={
+          data?.inventory.isConsistent === false
+            ? "库存统计与二维码状态存在差异，请先检查扫码链路"
+            : "当前库存统计已与二维码状态和库存流水对齐"
+        }
+        description={
+          data
+            ? `本次统计生成于 ${formatDateTime(data.generatedAt)}。合同数量只是业务目标量，真正库存由二维码状态和扫码流水共同决定。`
+            : "首页会优先展示真实库存结果，再叠加经营演示状态。"
+        }
+      />
+
+      <section>
+        <div className="dashboard-section-head">
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            订单池总览
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            首页默认优先查看进行中的订单，已完成、售后、异常、归档订单分池管理
+          </Typography.Text>
+        </div>
+
+        <div className="dashboard-order-pools">
+          {loading && !data
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <Card key={index} className="placeholder-card">
+                  <Skeleton active paragraph={{ rows: 2 }} />
+                </Card>
+              ))
+            : data?.orderPools.map((pool) => (
+                <Card
+                  key={pool.key}
+                  className={`placeholder-card dashboard-order-pool-card${
+                    data.orderView === pool.key ? " is-active" : ""
+                  }`}
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("orderView", pool.key);
+                    next.delete("focusContractId");
+                    setSearchParams(next);
+                  }}
+                >
+                  <Space direction="vertical" size="small" style={{ width: "100%" }}>
+                    <Typography.Title level={5} style={{ margin: 0 }}>
+                      {pool.label}
+                    </Typography.Title>
+                    <Typography.Text type="secondary">{pool.description}</Typography.Text>
+                    <Statistic title="订单数" value={pool.count} />
+                  </Space>
+                </Card>
+              ))}
+        </div>
+      </section>
+
+      <section>
+        <div className="dashboard-section-head">
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            当前主订单状态
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            使用主流程状态、售后状态、异常状态、归档状态四个维度管理订单
+          </Typography.Text>
+        </div>
+
+        <div className="dashboard-focus-statuses">
+          <Card className="placeholder-card dashboard-focus-status-card">
+            <Space direction="vertical" size="small">
+              <Typography.Text type="secondary">主流程状态</Typography.Text>
+              <Tag color={toneColorMap[data?.focus.mainFlowTone ?? "default"]}>
+                {data?.focus.mainFlowStatusText ?? "未选择"}
+              </Tag>
+            </Space>
+          </Card>
+          <Card className="placeholder-card dashboard-focus-status-card">
+            <Space direction="vertical" size="small">
+              <Typography.Text type="secondary">售后状态</Typography.Text>
+              <Tag color={toneColorMap[data?.focus.afterSalesTone ?? "default"]}>
+                {data?.focus.afterSalesStatusText ?? "未选择"}
+              </Tag>
+            </Space>
+          </Card>
+          <Card className="placeholder-card dashboard-focus-status-card">
+            <Space direction="vertical" size="small">
+              <Typography.Text type="secondary">异常状态</Typography.Text>
+              <Tag color={toneColorMap[data?.focus.exceptionTone ?? "default"]}>
+                {data?.focus.exceptionStatusText ?? "未选择"}
+              </Tag>
+            </Space>
+          </Card>
+          <Card className="placeholder-card dashboard-focus-status-card">
+            <Space direction="vertical" size="small">
+              <Typography.Text type="secondary">归档状态</Typography.Text>
+              <Tag color={toneColorMap[data?.focus.archiveTone ?? "default"]}>
+                {data?.focus.archiveStatusText ?? "未选择"}
+              </Tag>
+            </Space>
+          </Card>
+        </div>
+      </section>
+
+      <section>
+        <div className="dashboard-section-head">
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            真实库存总览
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            这一组数字直接来自 `QrItem.status` 和 `StockMovement`
+          </Typography.Text>
+        </div>
+
+        <div className="document-summary-grid dashboard-kpi-grid">
+          {loading && !data
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <Card key={index} className="stat-card">
+                  <Skeleton active paragraph={false} />
+                </Card>
+              ))
+            : inventoryCards.map((card) => (
+                <Card key={card.label} className="stat-card">
+                  <Statistic title={card.label} value={card.value} suffix={card.suffix} />
+                </Card>
+              ))}
+        </div>
+      </section>
+
+      <Row gutter={[20, 20]}>
+        <Col xs={24} xl={10}>
+          <Card className="placeholder-card dashboard-progress-card" title="真实执行进度">
+            {data ? (
+              <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                <div>
+                  <Typography.Text type="secondary">当前主合同：{selectedContractLabel}</Typography.Text>
+                </div>
+
+                {!hasFocusedOrder ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="当前订单池暂无主订单"
+                    description="这个订单池当前还没有合同进入该状态，因此这里只保留空视角，不回退显示其他池子的主订单。"
+                  />
+                ) : null}
+
+                <div>
+                  <div className="dashboard-progress-header">
+                    <span>入库执行</span>
+                    <strong>
+                      {data.execution.inboundCompleted}/{data.execution.totalQuantity}
+                      {data.execution.unit}
+                    </strong>
+                  </div>
+                  <Progress percent={data.execution.inboundProgressPercent} strokeColor="#1677ff" />
+                  <Typography.Text type="secondary">
+                    已完成入库 {data.execution.inboundCompleted}
+                    {data.execution.unit}，仍有 {data.execution.inboundPending}
+                    {data.execution.unit} 在途待扫码。
+                  </Typography.Text>
+                </div>
+
+                <div>
+                  <div className="dashboard-progress-header">
+                    <span>出库执行</span>
+                    <strong>
+                      {data.execution.outboundCompleted}/{data.execution.outboundTarget}
+                      {data.execution.unit}
+                    </strong>
+                  </div>
+                  <Progress percent={data.execution.outboundProgressPercent} strokeColor="#fa8c16" />
+                  <Typography.Text type="secondary">
+                    计划出库 {data.execution.outboundTarget}
+                    {data.execution.unit}，已出库 {data.execution.outboundCompleted}
+                    {data.execution.unit}，剩余 {data.execution.outboundRemaining}
+                    {data.execution.unit}。
+                  </Typography.Text>
+                </div>
+
+                <div className="dashboard-mini-grid">
+                  <div>
+                    <span className="app-header-panel-label">客户</span>
+                    <strong>{hasFocusedOrder ? data.focus.customerName ?? data.scenario.customerName : "当前池暂无订单"}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">供应商</span>
+                    <strong>{hasFocusedOrder ? data.scenario.supplierName : "当前池暂无订单"}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">合同数量</span>
+                    <strong>
+                      {hasFocusedOrder
+                        ? `${data.focus.contractQuantity ?? data.scenario.totalQuantity} ${data.focus.unit ?? data.scenario.unit}`
+                        : "0"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">合同金额</span>
+                    <strong>
+                      {hasFocusedOrder ? `${data.scenario.amount} ${data.scenario.currency}` : "当前池暂无订单"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">关联合同批次</span>
+                    <strong>{data.focus.batchCount}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">订单池</span>
+                    <strong>{activeOrderPool?.label ?? "进行中订单"}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">AI 模式</span>
+                    <strong>{data.assistant.llmEnabled ? "升级版 AI" : "模板 AI"}</strong>
+                  </div>
+                </div>
+              </Space>
+            ) : (
+              <Skeleton active paragraph={{ rows: 8 }} />
+            )}
+          </Card>
+        </Col>
+
+        <Col xs={24} xl={14}>
+          <Card className="placeholder-card" title="最近工单与待办">
+            {data ? (
+              data.recentTasks.length > 0 ? (
+                <List
+                  dataSource={data.recentTasks}
+                  renderItem={(item) => (
+                    <List.Item
+                      className="dashboard-task-item"
+                      actions={[
+                        <Button key="open" type="link" onClick={() => navigate(item.routePath)}>
+                          打开
+                        </Button>
+                      ]}
+                    >
+                      <List.Item.Meta
+                        title={
+                          <Space wrap>
+                            <span>{item.title}</span>
+                            <Tag color={toneColorMap[item.tone]}>{item.statusText}</Tag>
+                          </Space>
+                        }
+                        description={
+                          <Space direction="vertical" size={4}>
+                            <Typography.Text type="secondary">
+                              责任角色：{item.owner} | 关联对象：{item.reference}
+                            </Typography.Text>
+                            <Typography.Text>{item.description}</Typography.Text>
+                          </Space>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Empty description="当前还没有待展示的首页工单与待办。" />
+              )
+            ) : (
+              <Skeleton active paragraph={{ rows: 6 }} />
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      <section>
+        <div className="dashboard-section-head">
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            ERP 模块状态
+          </Typography.Title>
+          <Typography.Text type="secondary">真实闭环与成熟展示模块在首页统一串联</Typography.Text>
+        </div>
+
+        <div className="dashboard-status-grid">
+          {loading && !data
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <Card key={index} className="placeholder-card">
+                  <Skeleton active paragraph={{ rows: 4 }} />
+                </Card>
+              ))
+            : data?.statusCards.map((card) => (
+                <Card key={card.key} className="placeholder-card dashboard-status-card">
+                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                    <Space wrap>
+                      <Typography.Title level={5} style={{ margin: 0 }}>
+                        {card.title}
+                      </Typography.Title>
+                      <Tag color={toneColorMap[card.tone]}>{card.statusText}</Tag>
+                    </Space>
+                    <Statistic title={card.metricLabel} value={card.metricValue} />
+                    <Typography.Paragraph style={{ marginBottom: 0 }}>
+                      {card.description}
+                    </Typography.Paragraph>
+                    <Button type="link" icon={<ArrowRightOutlined />} onClick={() => navigate(card.routePath)}>
+                      进入模块
+                    </Button>
+                  </Space>
+                </Card>
+              ))}
+        </div>
+      </section>
+
+      <Row gutter={[20, 20]}>
+        <Col xs={24} xl={14}>
+          <Card className="placeholder-card" title="最近推进">
+            {data ? (
+              data.recentActivities.length > 0 ? (
+                <Timeline
+                  items={data.recentActivities.map((item) => ({
+                    color: toneColorMap[item.tone],
+                    children: (
+                      <div className="dashboard-timeline-item">
+                        <Space wrap>
+                          <Tag color={toneColorMap[item.tone]}>{item.kind}</Tag>
+                          <Typography.Text type="secondary">{formatDateTime(item.occurredAt)}</Typography.Text>
+                        </Space>
+                        <Typography.Title level={5} style={{ marginTop: 8, marginBottom: 8 }}>
+                          {item.title}
+                        </Typography.Title>
+                        <Typography.Paragraph style={{ marginBottom: 8 }}>
+                          {item.description}
+                        </Typography.Paragraph>
+                        <Button type="link" onClick={() => navigate(item.routePath)}>
+                          查看相关页面
+                        </Button>
+                      </div>
+                    )
+                  }))}
+                />
+              ) : (
+                <Empty description="当前还没有可展示的首页推进记录。" />
+              )
+            ) : (
+              <Skeleton active paragraph={{ rows: 7 }} />
+            )}
+          </Card>
+        </Col>
+
+        <Col xs={24} xl={10}>
+          <Card className="placeholder-card" title="系统基础状态">
+            {data ? (
+              <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                <div className="dashboard-mini-grid">
+                  <div>
+                    <span className="app-header-panel-label">单据数</span>
+                    <strong>{data.counts.documents}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">正式合同</span>
+                    <strong>{data.counts.contracts}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">批次数</span>
+                    <strong>{data.counts.batches}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">AI 记录</span>
+                    <strong>{data.counts.aiLogs}</strong>
+                  </div>
+                </div>
+
+                <Alert
+                  type="info"
+                  showIcon
+                  icon={<RobotOutlined />}
+                  message={
+                    data.assistant.llmEnabled
+                      ? `升级版 AI 已启用：${data.assistant.provider} / ${data.assistant.model ?? "-"}`
+                      : "当前使用本地模板 AI，未强依赖外部模型"
+                  }
+                  description={`运行来源：${data.assistant.source}。即使升级版 AI 调用失败，也会自动回退到模板回答。`}
+                />
+
+                <Space wrap>
+                  <Button
+                    type="primary"
+                    icon={<CheckCircleOutlined />}
+                    href="http://127.0.0.1:3001/api/setup/status"
+                    target="_blank"
+                  >
+                    查看系统状态
+                  </Button>
+                  <Button href="http://127.0.0.1:3001/api/health" target="_blank">
+                    查看服务状态
+                  </Button>
+                </Space>
+              </Space>
+            ) : (
+              <Skeleton active paragraph={{ rows: 6 }} />
+            )}
+          </Card>
+        </Col>
+      </Row>
+    </div>
   );
 }

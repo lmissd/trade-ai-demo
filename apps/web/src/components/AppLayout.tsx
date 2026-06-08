@@ -1,11 +1,18 @@
-import { Grid, Layout, Menu, Space, Tag, Typography } from "antd";
+import { RobotOutlined } from "@ant-design/icons";
+import { Drawer, FloatButton, Grid, Layout, Menu, Space, Tag, Typography } from "antd";
+import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { routeMenuEntries, routeMenuItems, routeMetaByPath } from "../routes/routeMeta";
+import { AiAssistantPanel } from "./AiAssistantPanel";
 
 const { Header, Content, Sider } = Layout;
 const { useBreakpoint } = Grid;
 
 function resolveSelectedMenuKey(pathname: string) {
+  if (pathname.startsWith("/ai-assistant")) {
+    return null;
+  }
+
   const compatibilityMenuKeyByPrefix = [
     { prefix: "/contracts", key: "/documents" },
     { prefix: "/batches", key: "/documents" },
@@ -26,6 +33,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const screens = useBreakpoint();
+  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const currentRoute = routeMetaByPath[location.pathname] ?? routeMetaByPath["/dashboard"];
   const selectedKey = resolveSelectedMenuKey(location.pathname);
 
@@ -45,7 +53,7 @@ export function AppLayout() {
 
         <Menu
           mode="inline"
-          selectedKeys={[selectedKey]}
+          selectedKeys={selectedKey ? [selectedKey] : []}
           items={routeMenuItems}
           onClick={({ key }) => navigate(String(key))}
         />
@@ -62,7 +70,7 @@ export function AppLayout() {
 
           <div className="app-header-panel">
             <span className="app-header-panel-label">当前演示版本</span>
-            <span className="app-header-panel-value">14 项 ERP 菜单已启用，核心真实闭环持续接入</span>
+            <span className="app-header-panel-value">13 项侧栏模块 + 全局 AI 助手入口已启用</span>
             <Space wrap>
               <Tag color="processing">React + Vite</Tag>
               <Tag color="success">SQLite + Prisma</Tag>
@@ -76,6 +84,25 @@ export function AppLayout() {
             <Outlet />
           </div>
         </Content>
+
+        <Drawer
+          title="AI 助手"
+          placement="right"
+          width={screens.xs ? "100%" : 460}
+          open={isAiAssistantOpen}
+          onClose={() => setIsAiAssistantOpen(false)}
+          className="ai-assistant-drawer"
+        >
+          <AiAssistantPanel variant="drawer" />
+        </Drawer>
+
+        <FloatButton
+          icon={<RobotOutlined />}
+          tooltip="AI 助手"
+          type="primary"
+          className="ai-assistant-float-button"
+          onClick={() => setIsAiAssistantOpen(true)}
+        />
       </Layout>
     </Layout>
   );

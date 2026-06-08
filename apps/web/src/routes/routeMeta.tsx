@@ -9,7 +9,6 @@ import {
   FileSearchOutlined,
   GlobalOutlined,
   InboxOutlined,
-  MessageOutlined,
   QrcodeOutlined,
   SafetyCertificateOutlined,
   ShoppingCartOutlined,
@@ -31,7 +30,7 @@ type RouteMenuEntry = {
 export const routeMetaByPath: Record<string, RouteMeta> = {
   "/dashboard": {
     title: "首页驾驶舱",
-    subtitle: "先展示国际贸易 ERP 的整体入口与演示主视角，后续再逐步接入真实库存和经营状态。"
+    subtitle: "现在已经切换为老板视角总览，统一展示真实库存、执行进度、AI 状态与 ERP 模块概览。"
   },
   "/documents": {
     title: "合同与单据",
@@ -108,8 +107,7 @@ export const routeMenuEntries: RouteMenuEntry[] = [
   { key: "/companies", icon: <ApartmentOutlined />, label: "多公司主体" },
   { key: "/work-orders", icon: <SolutionOutlined />, label: "自动工单" },
   { key: "/reports", icon: <ShopOutlined />, label: "数据报表" },
-  { key: "/qr-items", icon: <QrcodeOutlined />, label: "二维码追溯" },
-  { key: "/ai-assistant", icon: <MessageOutlined />, label: "AI 助手" }
+  { key: "/qr-items", icon: <QrcodeOutlined />, label: "二维码追溯" }
 ];
 
 export const routeMenuItems: ItemType[] = routeMenuEntries;

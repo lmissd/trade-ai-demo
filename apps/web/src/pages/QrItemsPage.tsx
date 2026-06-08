@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -148,6 +148,8 @@ export function QrItemsPage() {
   const [isItemsLoading, setIsItemsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [generatingBatchId, setGeneratingBatchId] = useState<string | null>(null);
+  const qrItemsRequestIdRef = useRef(0);
+  const qrItemDetailRequestIdRef = useRef(0);
 
   const selectedBatch = useMemo(
     () => batches.find((item) => item.id === selectedBatchId) ?? null,
@@ -181,14 +183,20 @@ export function QrItemsPage() {
   }
 
   async function loadQrItems() {
+    const requestId = qrItemsRequestIdRef.current + 1;
+    qrItemsRequestIdRef.current = requestId;
     setIsItemsLoading(true);
 
     try {
-      const searchParams = new URLSearchParams();
-
-      if (selectedBatchId) {
-        searchParams.set("batchId", selectedBatchId);
+      if (!selectedBatchId) {
+        setQrItems([]);
+        setSelectedQrItemId(null);
+        setSelectedQrItemDetail(null);
+        return;
       }
+
+      const searchParams = new URLSearchParams();
+      searchParams.set("batchId", selectedBatchId);
 
       if (selectedStatus !== "ALL") {
         searchParams.set("status", selectedStatus);
@@ -200,6 +208,11 @@ export function QrItemsPage() {
 
       const path = `/api/qr-items${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
       const items = await requestJson<QrItemListRecord[]>(path);
+
+      if (requestId !== qrItemsRequestIdRef.current) {
+        return;
+      }
+
       setQrItems(items);
 
       if (!selectedQrItemId && items.length > 0) {
@@ -210,22 +223,37 @@ export function QrItemsPage() {
         setSelectedQrItemId(items[0]?.id ?? null);
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载二维码列表失败。");
+      if (requestId === qrItemsRequestIdRef.current) {
+        message.error(error instanceof Error ? error.message : "加载二维码列表失败。");
+      }
     } finally {
-      setIsItemsLoading(false);
+      if (requestId === qrItemsRequestIdRef.current) {
+        setIsItemsLoading(false);
+      }
     }
   }
 
   async function loadQrItemDetail(qrItemId: string) {
+    const requestId = qrItemDetailRequestIdRef.current + 1;
+    qrItemDetailRequestIdRef.current = requestId;
     setIsDetailLoading(true);
 
     try {
       const detail = await requestJson<QrItemDetail>(`/api/qr-items/${qrItemId}`);
+
+      if (requestId !== qrItemDetailRequestIdRef.current) {
+        return;
+      }
+
       setSelectedQrItemDetail(detail);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载二维码详情失败。");
+      if (requestId === qrItemDetailRequestIdRef.current) {
+        message.error(error instanceof Error ? error.message : "加载二维码详情失败。");
+      }
     } finally {
-      setIsDetailLoading(false);
+      if (requestId === qrItemDetailRequestIdRef.current) {
+        setIsDetailLoading(false);
+      }
     }
   }
 
@@ -254,7 +282,9 @@ export function QrItemsPage() {
     setSelectedBatchId(batchId);
     setSelectedStatus("ALL");
     setKeyword("");
+    setQrItems([]);
     setSelectedQrItemId(null);
+    setSelectedQrItemDetail(null);
 
     if (syncUrl) {
       const nextSearchParams = new URLSearchParams(searchParams);
@@ -337,7 +367,7 @@ export function QrItemsPage() {
       <section className="page-hero">
         <h2>二维码追溯</h2>
         <p>
-          这里是阶段 5 的核心页面。它负责生成真实二维码、展示单个二维码生命周期，并为阶段 6 的扫码入库和阶段 8 的库存统计提供真实数据基础。
+          这里是阶段 5 的核心页面。它默认进入最新批次的追溯视角，负责生成真实二维码、展示单个二维码生命周期，并为阶段 6 的扫码入库和阶段 8 的库存统计提供真实数据基础。
         </p>
       </section>
 

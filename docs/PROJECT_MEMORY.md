@@ -115,7 +115,10 @@
   - Message: `feat: 完成阶段5-7二维码追溯与仓储扫码闭环`
 - 阶段 6：已完成，已包含在提交 `25868f7`
 - 阶段 7：已完成，已包含在提交 `25868f7`
-- 阶段 8：已完成第一版，等待用户验证后再提交 Git
+- 阶段 8：已完成，当前仍未单独提交 Git
+- 阶段 9：已完成，当前仍未提交 Git
+- 阶段 10：已完成，用户已确认可继续进入阶段 11，当前仍未提交 Git
+- 阶段 11：已完成，等待用户验证后再统一提交阶段 9 / 阶段 10 / 阶段 11 Git
 
 ## 当前数据库状态
 
@@ -127,30 +130,33 @@
 - `batches = 2`
 - `purchaseOrders = 2`
 - `purchaseOrderItems = 2`
+- `shipments = 1`
+- `shipmentNodes = 1`
 - `payments = 2`
 - `receivables = 2`
-- `qrItems = 120`
-- `stockMovements = 7`
+- `qrItems = 220`
+- `stockMovements = 17`
 - `preReceiveOrders = 1`
 - `inboundOrders = 1`
 - `outboundOrders = 1`
 - `salesOrders = 1`
+- `workOrders = 1`
 - `inventorySnapshots = 0`
-- `aiLogs = 6`
-- `auditLogs = 4`
+- `aiLogs = 36`
+- `auditLogs = 7`
 - `demoConfigs = 1`
 
 当前最新真实库存汇总为：
 
-- `totalQrItems = 120`
-- `inTransitInventory = 114`
-- `realtimeInventory = 5`
-- `availableInventory = 5`
+- `totalQrItems = 220`
+- `inTransitInventory = 204`
+- `realtimeInventory = 15`
+- `availableInventory = 15`
 - `frozenInventory = 0`
 - `outboundQuantity = 1`
-- `totalInboundMovements = 6`
+- `totalInboundMovements = 16`
 - `totalOutboundMovements = 1`
-- `statusAccountedQuantity = 120`
+- `statusAccountedQuantity = 220`
 - `isConsistent = true`
 
 这说明当前系统已经进入：
@@ -161,6 +167,9 @@
 - 二维码生成与追溯层：第一版已完成
 - 扫码入库、扫码出库层：已完成第一版
 - 库存真实统计层：已完成第一版
+- AI 真实库存问答层：已完成第一版
+- 首页驾驶舱总览层：已完成第一版
+- 采购与集货展示层：已完成第一版
 
 ## 阶段 3 已完成内容
 
@@ -584,6 +593,330 @@
 - 库存流水必须继续以 `StockMovement` 为追溯依据
 - 后续阶段 9 的 AI 库存问答，必须建立在这套真实库存汇总结果之上
 
+## 阶段 9 已完成内容
+
+阶段 9 已经实现：
+
+- 新增 AI 助手状态接口 `GET /api/ai-assistant/status`
+- 新增 AI 问答接口 `POST /api/ai-assistant/ask`
+- 后端已采用：
+  - 规则识别意图
+  - 受控查询真实业务数据
+  - 可选大模型组织语言
+  - 大模型不可用时模板兜底
+- 新增可复用库存汇总服务 `inventorySummary`
+- AI 助手当前已支持：
+  - 批次库存问答
+  - 合同库存问答
+  - 指定日期 / 今日入库问答
+  - 指定日期 / 今日出库问答
+  - 单个二维码生命周期问答
+  - 未回款合同摘要问答
+- 所有 AI 回答过程都会写入 `AiLog`
+- 前端 `http://127.0.0.1:5173/ai-assistant` 已从占位页升级为真实可提问页面
+- 前端页面已支持：
+  - 查看当前回答模式
+  - 查看 provider / model 状态
+  - 直接输入问题
+  - 点击建议问题快速提问
+  - 查看 AI 回答
+  - 查看关键高亮
+  - 查看回答依据
+- AI 助手入口现已进一步调整为：
+  - 左侧栏移除 `AI 助手` 固定菜单项
+  - 页面右下角新增全局悬浮入口
+  - 任意业务页面都可以直接唤起 AI 助手抽屉
+  - 独立路由 `http://127.0.0.1:5173/ai-assistant` 仍然保留，方便单独演示
+- 阶段 9 本次继续增强为：
+  - 默认保留“本地模板 AI”模式，不要求演示前先配置外部大模型
+  - 新增升级版 AI 配置接口：
+    - `GET /api/ai-assistant/config`
+    - `PUT /api/ai-assistant/config`
+    - `DELETE /api/ai-assistant/config`
+  - 新增网页内升级版 AI 配置能力：
+    - 可填写 `provider`
+    - 可填写 `model`
+    - 可填写 `baseUrl`
+    - 可填写 `apiKey`
+  - 网页保存的升级配置只写入后端本地运行时配置文件，不进入前端源码，不进入业务数据库
+  - 前端只能看到 Key 是否已配置与脱敏结果，不能回显完整 API Key
+  - AI 运行时优先级已经固定为：
+    - 网页保存的升级配置
+    - 后端 `.env` 配置
+    - 本地模板模式
+  - 即使升级版 AI 调用失败，也必须继续模板兜底，保证 Demo 链路不中断
+
+阶段 9 严格保持的原则：
+
+- AI 不直接查数据库
+- AI 不直接改数据库
+- 前端不暴露 API Key
+- 所有真实数据先由后端接口汇总，再交给 AI 组织语言
+- 即使接入大模型，库存数字来源也只能是 `QrItem.status` 与 `StockMovement`
+- 合同数量不直接等于库存数量，只有在真实扫码入库完成后，库存才会与实物状态一致
+
+阶段 9 当前环境状态：
+
+- 当前项目仍然支持“不开 `.env` 也能用模板 AI 跑通 Demo”
+- 后端仍然预留：
+  - `AI_PROVIDER`
+  - `AI_API_KEY`
+  - `AI_MODEL`
+  - `AI_BASE_URL`
+- 当前这台机器的实际运行态已经切到网页保存的升级版配置：
+  - `llmEnabled = true`
+  - `provider = deepseek`
+  - `model = deepseek-v4-flash`
+  - `source = runtime`
+  - `baseUrl = https://api.deepseek.com`
+- 当前运行时配置里已经存在脱敏后的 Key 状态：
+  - `apiKeyConfigured = true`
+  - `apiKeyMasked = sk-9***0f5c`
+- 网页配置文件当前保存在本地运行时目录 `.runtime/`，并已加入 `.gitignore`
+- 如果你后续删除网页升级配置，系统仍然会自动回退到 `template / mock` 模式
+
+阶段 9 自测结果：
+
+- `npx tsc -p apps/server/tsconfig.json --noEmit`：通过
+- `npm run build --workspace @trade-ai-demo/web`：通过
+- `GET /api/ai-assistant/status`：通过
+- `POST /api/ai-assistant/ask`：通过
+- `GET /api/ai-assistant/config`：通过
+- `PUT /api/ai-assistant/config`：通过
+- `DELETE /api/ai-assistant/config`：通过
+- 已验证问题：
+  - `这批货现在还有多少？`
+  - `CTR-20260607-3BP3IZ 这个合同现在还有多少库存？`
+  - `BAT-20260607-3BP3IZ-0001 这个二维码现在是什么状态？`
+  - `2026/6/8 入库多少箱？`
+- 浏览器检视 `http://127.0.0.1:5173/ai-assistant`：通过
+- 浏览器检视 `http://127.0.0.1:5173/documents`：通过
+- 已确认建议问题按钮可直接触发提问
+- 已确认回答区与回答依据区会同步渲染
+- 已确认当前模板回答使用的是真实库存与真实库存流水
+- 已确认左侧栏不再显示 `AI 助手`
+- 已确认右下角悬浮按钮可在非 AI 页面直接唤起 AI 助手抽屉
+- 已确认串行链路：
+  - 保存网页升级配置后，`status.source = runtime`
+  - 升级配置使用不可用测试 Key 时，问答会回退 `template` 回答，但仍保留真实库存答案
+  - 删除网页升级配置后，`status.source = template`
+
+阶段 9 验证时需要记住：
+
+- 当前真实库存基线已经变化为：
+  - 在途 `104`
+  - 实时 `15`
+  - 可用 `15`
+  - 冻结 `0`
+  - 已出库 `1`
+- 当前真实流水基线已经变化为：
+  - 入库流水 `16`
+  - 出库流水 `1`
+- 这些数字来自当前数据库实时状态，不再是阶段 8 初次自测时的那组数据
+
+## 阶段 10 已完成内容
+
+阶段 10 已经实现：
+
+- 新增首页驾驶舱聚合接口 `GET /api/dashboard/overview`
+- 后端新增统一聚合服务 `dashboardOverview`
+- 首页 `http://127.0.0.1:5173/dashboard` 已从占位页升级为正式驾驶舱
+- 首页现在已经支持：
+  - 真实库存总览卡片
+  - 入库 / 出库执行进度卡片
+  - 演示场景总览卡片
+  - ERP 模块状态卡片
+  - 最近工单与待办
+  - 最近推进时间线
+  - 系统基础状态与 AI 运行状态
+- 首页库存与执行进度继续严格来自真实二维码状态与库存流水：
+  - `inTransitInventory`
+  - `realtimeInventory`
+  - `availableInventory`
+  - `outboundQuantity`
+  - `totalInboundMovements`
+  - `totalOutboundMovements`
+- 首页同时把成熟 ERP 演示模块串起来展示：
+  - 合同与单据
+  - 二维码追溯
+  - 仓储扫码
+  - 财务回款
+  - AI 助手
+  - 演示场景配置
+- 首页“最近推进”已经能混合展示：
+  - 仓储流水
+  - 单据进展
+  - 合同生成
+  - 批次推进
+  - AI 调用记录
+- 首页现在新增“主合同视角”切换：
+  - 驾驶舱右侧支持从已有正式合同中自主选择一个主合同
+  - 页面通过 `focusContractId` 查询参数驱动当前主合同视角
+  - 主合同卡片、主批次、执行进度、主待办会随所选合同切换
+  - 全局库存总览卡片仍保持展示全部真实库存统计，不会因为切换主合同而伪造或改写全局库存
+  - 如果所选合同尚未进入二维码 / 扫码环节，则只展示该合同基础信息与 0 进度，不伪造库存与仓储执行结果
+- 首页现在新增“订单池视角”切换：
+  - 默认优先进入 `进行中订单`
+  - 同时支持切换：
+    - `已完成待归档`
+    - `售后订单`
+    - `异常订单`
+    - `已归档订单`
+    - `全部订单`
+  - 驾驶舱会优先按订单池筛选可用合同，再在当前池内选择主合同视角
+- 首页当前已把订单状态拆成四个维度展示：
+  - `主流程状态`
+  - `售后状态`
+  - `异常状态`
+  - `归档状态`
+- 当前阶段 10 先按演示版口径实现：
+  - 主流程状态依据二维码、扫码、出库、回款草稿状态推导
+  - 售后状态当前默认展示 `未触发售后`
+  - 异常状态当前依据异常二维码数量推导
+  - 归档状态当前依据“主流程是否完成且无售后、无异常”推导
+- 长期 ERP 状态设计原则已锁定：
+  - “订单完成”不等于“自动归档”
+  - 全链路完成后先进入 `待归档`
+  - 人工确认后才进入 `已归档`
+  - 售后状态与主流程状态分离
+  - 异常状态与主流程状态分离
+  - 退货、退款、换货等售后处理不能直接删除原始库存和资金历史，正式版应通过冲销、逆向记录或补充单据处理
+- 首页“二维码追溯”卡片的统计口径已进一步明确：
+  - 该卡片展示系统内所有已生成二维码的全局累计
+  - 不跟随主合同视角切换
+  - 如果后续新批次再生成 100 个二维码，则首页这里应从 120 变为 220
+- 首页进入 `二维码追溯` 模块后的默认展示口径已进一步明确：
+  - 二维码追溯页默认进入最新批次视角
+  - 若最新批次尚未生成二维码，则二维码列表与二维码详情保持空白
+  - 若最新批次已生成二维码，则默认展示该批次的二维码列表与详情
+  - 页面顶部当前批次、左侧二维码列表、右侧二维码详情必须严格保持同一批次上下文，不能残留上一批次数据
+- 首页空订单池行为已明确：
+  - 当前订单池下如果没有合同，首页仍保留全局库存总览、模块总览、最近推进
+  - 但主订单视角必须显示为空
+  - 不允许自动回退展示其他订单池的合同，避免误导演示
+- 首页主订单待办行为已补强：
+  - 当前主订单切换后，预收货、入库、出库、销售配送等待办优先跟随当前主合同
+  - 不再默认混入其他合同的任务
+- 首页没有新增临时“阶段验证入口”
+- 最终查看位置就是左侧菜单中的 `首页驾驶舱`
+
+阶段 10 当前接口与页面基线：
+
+- `GET /api/dashboard/overview` 当前已返回：
+  - `assistant.provider = deepseek`
+  - `assistant.model = deepseek-v4-flash`
+  - `assistant.source = runtime`
+  - `orderView = active`
+  - `orderPools.active.count = 2`
+  - `inventory.inTransitInventory = 204`
+  - `inventory.realtimeInventory = 15`
+  - `inventory.availableInventory = 15`
+  - `inventory.outboundQuantity = 1`
+  - `inventory.totalInboundMovements = 16`
+  - `inventory.totalOutboundMovements = 1`
+  - `inventory.isConsistent = true`
+  - `focus.contractNo = CTR-20260608-F8RY1S`
+  - `focus.batchNo = BAT-20260608-F8RY1S`
+  - `focus.mainFlowStatusText = 在途待入库`
+  - `statusCards[qrcode].metricLabel = 全局二维码累计`
+  - `statusCards[qrcode].metricValue = 220 个码`
+- `GET /api/dashboard/overview?orderView=active` 当前已返回：
+  - `availableContracts.length = 2`
+  - `focus.contractNo = CTR-20260608-F8RY1S`
+  - `focus.mainFlowStatusText = 在途待入库`
+  - `execution.totalQuantity = 100`
+  - `execution.inboundPending = 100`
+  - `recentTasks` 已优先跟随当前主合同筛选
+- `GET /api/dashboard/overview?orderView=completed` 当前已返回：
+  - `availableContracts.length = 0`
+  - `focus.contractNo = null`
+  - `execution.totalQuantity = 0`
+  - 首页已满足“空订单池时主订单视角保持为空，不回退展示其他池合同”
+- 首页最近待办当前可根据主合同切换不同引用对象：
+  - 当前主合同无匹配仓储任务时，仅保留通用待办，例如单据草稿、财务回款
+  - 当前主合同有匹配仓储任务时，再显示对应合同的预收货、入库、出库、销售配送跟进
+
+阶段 10 自测结果：
+
+- `npx tsc -p apps/server/tsconfig.json --noEmit`：通过
+- `npm run build --workspace @trade-ai-demo/web`：通过
+- `GET /api/dashboard/overview`：通过
+- `GET /api/dashboard/overview?orderView=active`：通过
+- `GET /api/dashboard/overview?orderView=completed`：通过
+- 已确认首页默认优先进入 `进行中订单`
+- 已确认首页支持订单池切换与主合同切换两层视角
+- 已确认首页已展示主流程 / 售后 / 异常 / 归档四维状态卡
+- 已确认空订单池时不会回退展示其他池子的合同
+- 已确认首页二维码卡片口径为“全局二维码累计”，不跟随主合同视角变化
+- 已确认二维码追溯页切换批次时会主动清空旧列表与旧详情，避免旧批次二维码残留覆盖新批次视图
+- 已确认首页接口返回真实库存、执行进度、AI 状态与最近推进数据
+- 已确认首页主订单待办会尽量跟随当前主合同，不再默认混入其他合同任务
+- 已确认首页支持自主切换主合同视角，且切换后不会污染全局库存总览
+- 已确认首页入口位于正式菜单 `首页驾驶舱`，不是单独临时验证页
+
+## 阶段 11 已完成内容
+
+阶段 11 已经实现：
+
+- 新增采购与集货后端接口：
+  - `GET /api/procurement/orders`
+  - `GET /api/procurement/orders/:id`
+  - `POST /api/procurement/orders/:id/progress`
+- 新增前端正式页面：
+  - 左侧菜单 `采购与集货`
+  - 路由 `http://127.0.0.1:5173/procurement`
+- 页面已从骨架页升级为真实演示工作台，支持：
+  - 采购单列表
+  - 采购单详情抽屉
+  - 采购状态步骤条
+  - 关联合同号、批次号、SKU、数量、交期、目的仓库展示
+  - 关联二维码状态概况展示
+  - 关联国际物流记录展示
+  - 关联自动工单展示
+  - 状态推进历史展示
+- 当前采购状态按演示版顺序推进：
+  - `DRAFT`
+  - `SUPPLIER_SHIPPED`
+  - `COLLECTION_COMPLETED`
+- 页面交互已限制为只能顺序推进，不允许跳步或回退
+- 阶段 11 严格保持：
+  - 采购与集货状态推进不会直接改库存
+  - 不会直接改 `QrItem.status`
+  - 不会直接改 `StockMovement`
+  - 库存仍然只能由二维码扫码入库 / 扫码出库驱动
+- 当采购状态推进到 `COLLECTION_COMPLETED` 时，系统会自动联动：
+  - 创建 `Shipment`
+  - 创建 `ShipmentNode`
+  - 创建 `WorkOrder`
+  - 让采购模块把业务上下文正式交给国际物流阶段
+
+阶段 11 当前真实演示数据基线：
+
+- 采购单 `PO-20260608-F8RY1S`
+  - 当前已推进到 `COLLECTION_COMPLETED`
+  - 已自动生成物流记录 `SHP-20260608-F8RY1S`
+  - 已自动生成运输安排工单 `WO-LOG-20260608-F8RY1S`
+  - 已生成物流节点 `国内集货完成`
+- 采购单 `PO-20260607-3BP3IZ`
+  - 当前仍保持 `DRAFT`
+  - 可继续用于现场演示“供应商已发货”与“国内集货完成”的手动推进
+
+阶段 11 自测结果：
+
+- `npx tsc -p apps/server/tsconfig.json --noEmit`：通过
+- `npm run build --workspace @trade-ai-demo/web`：通过
+- `GET /api/procurement/orders`：通过
+- `GET /api/procurement/orders/:id`：通过
+- `POST /api/procurement/orders/:id/progress`：
+  - 已验证 `DRAFT -> SUPPLIER_SHIPPED`
+  - 已验证 `SUPPLIER_SHIPPED -> COLLECTION_COMPLETED`
+  - 已验证 `COLLECTION_COMPLETED` 后自动生成 `Shipment / ShipmentNode / WorkOrder`
+- 已确认采购页详情抽屉可回读：
+  - 最新采购状态
+  - 最新物流记录
+  - 最新工单信息
+  - 最新推进历史
+
 ## 最近一次二维码入口优化
 
 - 当某个批次已经生成二维码后，批次详情页主按钮改为“查看本批次二维码”
@@ -596,12 +929,105 @@
   - 同一批次再次调用 `POST /api/qr-items/generate` 不会生成第二批二维码
   - 只会返回已有二维码数据
 
+## 最近一次 AI 升级版配置修复
+
+- 已修复“点击保存升级版配置后，界面看起来没有生效”的问题
+- 根因更接近“动态接口状态刷新不稳定”，而不是保存接口本身完全失效
+- 本次已补强：
+  - 后端 `/api/*` 动态接口统一返回 `no-store` 禁缓存响应头
+  - 前端 `requestJson` 统一使用 `cache: "no-store"`
+  - 升级版 AI 配置保存成功后，前端先立即同步本地显示状态，再重新拉取后端真实状态
+- 已重新验证：
+  - `PUT /api/ai-assistant/config` 可以写入 `.runtime/ai-assistant.config.json`
+  - `GET /api/ai-assistant/config` 可以正确返回已保存配置
+  - `DELETE /api/ai-assistant/config` 后会恢复为 `template / mock` 模式
+
+## 最近一次阶段 9 AI 问答补充修复
+
+- 已补充支持“当前模型 / 回答模式 / 运行来源”这类助手状态问答
+- 这类问题不再默认落到库存总览意图
+- 当前 `AI 助手` 会把以下问题识别为助手状态类：
+  - `你现在是什么模型`
+  - `当前模型`
+  - `回答模式`
+  - `运行来源`
+  - `provider / model / base url`
+- 这类问题当前优先使用后端确定答案，不依赖外部模型生成，因此即使升级版模型临时失败，也能稳定回答当前使用中的 `provider / model / source`
+
+- 同时已补充升级版 AI 失败时的可见性：
+  - 如果升级版 AI 调用失败，不再只显示“本地模板回答”
+  - 页面会额外显示明确的回退原因
+
+- 当前已确认的快跑配置现状：
+  - 页面保存的配置会被识别为：
+    - `provider = 快跑`
+    - `model = gpt-5.4`
+    - `baseUrl = https://kuaipao.ai/v1`
+  - 但当前这套地址返回的不是可直接解析的标准 OpenAI 兼容回答内容
+  - 已通过真实请求确认：
+    - 直接请求该地址时，曾返回网页 HTML
+    - 兼容 SDK 调用时，也会返回非标准流式文本片段，而不是正常 `choices[0].message.content`
+  - 因此当前系统会自动回退模板回答，并提示类似：
+    - `当前 Base URL 返回的是网页 HTML，不是 OpenAI 兼容 API`
+    - 或 `当前模型接口返回了非标准流式结果，未能解析出回答内容`
+
+- 当前结论必须记住：
+  - 你页面上看到“已保存升级版配置”不等于“升级版模型已成功完成回答”
+  - 现在网页配置保存链路已经正常
+  - 现在问题的重点已经从“保存是否成功”转为“第三方平台接口地址是否真的是标准 OpenAI 兼容 API 地址”
+
+## 最近一次阶段 9 外部大模型接入深化
+
+- 当前方向已明确收敛为：
+  - 产品层不绑定“本机 Codex”
+  - 升级版 AI 助手继续保持为“通用外部大模型接入”
+  - `DeepSeek` 只是官方推荐且更容易直接接通的示例提供商之一
+
+- 本次后端接入层已继续增强为：
+  - 保持网页运行时配置 + `.env` + 本地模板三层优先级
+  - 对 OpenAI 兼容调用新增双协议兼容尝试：
+    - 先走 `chat.completions`
+    - 必要时自动尝试 `responses`
+  - 对非标准字符串返回、流式文本片段继续做兼容解析
+  - 新增外部模型 SDK 超时控制，避免错误地址长时间卡住问答
+
+- 本次前端升级版 AI 助手已补充：
+  - 明确说明“支持 DeepSeek 或其他 OpenAI 兼容大模型”
+  - 新增 DeepSeek 官方参数快捷示例
+  - 页面直接提示官方推荐：
+    - `Base URL = https://api.deepseek.com`
+    - `Model = deepseek-v4-flash`
+    - `Model = deepseek-v4-pro`
+  - 页面已提示：
+    - `deepseek-chat`
+    - `deepseek-reasoner`
+    - 将于 `2026-07-24 15:59 UTC` 停止使用
+  - 后端已额外兼容：
+    - `api.deepseek.com` 不再被错误自动补成 `/v1`
+    - 避免 DeepSeek 官方地址因统一规范化逻辑而连错接口
+
+- 本次最新自测结论必须记住：
+  - 当前项目依然保留了之前网页里保存的快跑运行时配置
+  - 但在本次双协议兼容增强后，当前这套已保存配置已经能够真正返回外部大模型答案
+  - 最新源码级自测结果：
+    - 问题：`这批货现在还有多少？`
+    - 返回：`answerMode = llm`
+    - 返回：`provider = 快跑`
+    - 返回：`fallbackReason = null`
+  - 说明当前阶段 9 已经不只是“保存配置成功”或“显示当前模型”
+  - 而是已经具备“真实调用外部大模型并回答业务问题”的能力
+
+- 当前真实限制也必须记住：
+  - 现在本机环境变量里还没有 `DEEPSEEK_API_KEY`
+  - 所以虽然页面已经提供 DeepSeek 官方快捷参数，但还没有办法在当前机器上直接替你完成 DeepSeek 真连通自测
+  - 如果你后续填入自己的 DeepSeek Key，就可以直接验证这条链路
+
 ## 当前开发策略提醒
 
 - 长期 ERP 升级地基已经记录进项目记忆
 - 未来“独立手机静态扫码端”也已经记录为升级方向
 - 但当前工作仍然回到 Demo 主线，不切去做长期部署改造
-- 下一步在用户确认当前阶段满意后，可按 TODO 进入 `阶段 9：AI 真实库存问答`
+- 当前应先等待用户验证阶段 11，再决定是否提交当前未提交的 Git 变更
 
 ## 下一步应该做什么
 
@@ -609,10 +1035,13 @@
 - 当前阶段 5 已完成，并将与阶段 6/7 一起作为最近一次提交基线
 - 当前阶段 6 已完成，并将作为阶段 8 的开发基线
 - 当前阶段 7 已完成，并将作为阶段 8 的开发基线
-- 当前阶段 8 已完成第一版，等待用户验证
+- 当前阶段 8、阶段 9、阶段 10、阶段 11 均已完成，但阶段 9 / 阶段 10 / 阶段 11 还未按你的新规则提交 Git
 - 长期升级原则已记住，但当前不切换开发主线
-- 下一个大环节应进入：
-  - `阶段 9：AI 真实库存问答`
+- 当前先等待你验证：
+  - `阶段 11：采购与集货展示模块`
+- 你确认满意后：
+  - 先统一提交当前阶段 9 / 阶段 10 / 阶段 11 相关 Git
+  - 再进入 `阶段 12：国际物流展示模块`
 
 阶段 6 必须继续保持：
 
