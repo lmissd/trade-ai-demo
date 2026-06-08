@@ -19,6 +19,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { ReloadOutlined } from "@ant-design/icons";
+import { useSearchParams } from "react-router-dom";
 import { requestJson, resolveApiUrl } from "../lib/api";
 
 type BatchOption = {
@@ -134,9 +135,11 @@ function formatDateTime(value?: string | null) {
 }
 
 export function QrItemsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialBatchId = searchParams.get("batchId") ?? undefined;
   const [batches, setBatches] = useState<BatchOption[]>([]);
   const [qrItems, setQrItems] = useState<QrItemListRecord[]>([]);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | undefined>(undefined);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | undefined>(initialBatchId);
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [keyword, setKeyword] = useState("");
   const [selectedQrItemId, setSelectedQrItemId] = useState<string | null>(null);
@@ -247,9 +250,30 @@ export function QrItemsPage() {
     }
   }
 
+  function focusBatchQrItems(batchId: string, syncUrl = true) {
+    setSelectedBatchId(batchId);
+    setSelectedStatus("ALL");
+    setKeyword("");
+    setSelectedQrItemId(null);
+
+    if (syncUrl) {
+      const nextSearchParams = new URLSearchParams(searchParams);
+      nextSearchParams.set("batchId", batchId);
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }
+
   useEffect(() => {
     void loadBatches();
   }, []);
+
+  useEffect(() => {
+    const queryBatchId = searchParams.get("batchId") ?? undefined;
+
+    if (queryBatchId && queryBatchId !== selectedBatchId) {
+      focusBatchQrItems(queryBatchId, false);
+    }
+  }, [searchParams, selectedBatchId]);
 
   useEffect(() => {
     void loadQrItems();
@@ -361,7 +385,7 @@ export function QrItemsPage() {
                   value: batch.id,
                   label: `${batch.batchNo} · ${batch.productName} · ${batch.totalQuantity}${batch.unit}`
                 }))}
-                onChange={(value) => setSelectedBatchId(value)}
+                onChange={(value) => focusBatchQrItems(value)}
                 style={{ width: "100%" }}
               />
             </Space>
@@ -424,13 +448,19 @@ export function QrItemsPage() {
             />
 
             <Space wrap>
-              <Button
-                type="primary"
-                loading={generatingBatchId === selectedBatch.id}
-                onClick={() => void handleGenerateQrItems(selectedBatch.id)}
-              >
-                生成本批次二维码
-              </Button>
+              {selectedBatch.qrSummary.total > 0 ? (
+                <Button type="primary" onClick={() => focusBatchQrItems(selectedBatch.id)}>
+                  查看当前批次二维码
+                </Button>
+              ) : (
+                <Button
+                  type="primary"
+                  loading={generatingBatchId === selectedBatch.id}
+                  onClick={() => void handleGenerateQrItems(selectedBatch.id)}
+                >
+                  生成本批次二维码
+                </Button>
+              )}
             </Space>
           </Space>
         </Card>

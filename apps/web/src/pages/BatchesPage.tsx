@@ -186,6 +186,10 @@ export function BatchesPage() {
     }
   }
 
+  function openBatchQrItems(batchId: string) {
+    navigate(`/qr-items?batchId=${encodeURIComponent(batchId)}`);
+  }
+
   useEffect(() => {
     void loadBatches();
   }, []);
@@ -249,7 +253,7 @@ export function BatchesPage() {
       <section className="page-hero">
         <h2>正式批次数据</h2>
         <p>
-          这里展示的是由正式合同生成的货物批次。当前阶段批次已经准备好进入二维码生成，但还没有任何二维码，也没有库存。
+          这里展示的是由正式合同生成的货物批次。当前阶段批次已经接入二维码、扫码入库 / 出库和真实库存统计，库存变化只来自二维码状态流转。
         </p>
       </section>
 
@@ -270,10 +274,10 @@ export function BatchesPage() {
         </Col>
         <Col xs={24} xl={16}>
           <Alert
-            type="warning"
+            type="info"
             showIcon
-            message="阶段 4 规则"
-            description="当前批次已经正式落库，但还没有二维码。库存必须等阶段 5 生成 QrItem、阶段 6 扫码入库后才会产生。"
+            message="阶段 8 真实库存规则"
+            description="批次数量只是业务目标量，不等于当前库存。只有二维码状态从待入库变为在库、再从在库变为已出库后，库存统计才会变化。"
           />
         </Col>
       </Row>
@@ -342,18 +346,28 @@ export function BatchesPage() {
                   type="info"
                   showIcon
                   message="当前二维码与库存状态"
-                  description={`已生成二维码 ${selectedBatchDetail.qrSummary.total} 个；在库 ${selectedBatchDetail.qrSummary.inStock} 个；待入库 ${selectedBatchDetail.qrSummary.pendingInbound} 个。当前阶段正常情况下应全部为 0。`}
+                  description={`已生成二维码 ${selectedBatchDetail.qrSummary.total} 个；在途 ${selectedBatchDetail.qrSummary.pendingInbound} 个；在库 ${selectedBatchDetail.qrSummary.inStock} 个；已出库 ${selectedBatchDetail.qrSummary.outbound} 个。`}
                 />
 
                 <Space wrap>
-                  <Button
-                    type="primary"
-                    icon={<QrcodeOutlined />}
-                    loading={generatingBatchId === selectedBatchDetail.id}
-                    onClick={() => void handleGenerateQr(selectedBatchDetail.id)}
-                  >
-                    生成本批次二维码
-                  </Button>
+                  {selectedBatchDetail.qrSummary.total > 0 ? (
+                    <Button
+                      type="primary"
+                      icon={<QrcodeOutlined />}
+                      onClick={() => openBatchQrItems(selectedBatchDetail.id)}
+                    >
+                      查看本批次二维码
+                    </Button>
+                  ) : (
+                    <Button
+                      type="primary"
+                      icon={<QrcodeOutlined />}
+                      loading={generatingBatchId === selectedBatchDetail.id}
+                      onClick={() => void handleGenerateQr(selectedBatchDetail.id)}
+                    >
+                      生成本批次二维码
+                    </Button>
+                  )}
                   <Button icon={<QrcodeOutlined />} onClick={() => navigate("/qr-items")}>
                     查看二维码追溯
                   </Button>
@@ -364,7 +378,7 @@ export function BatchesPage() {
                   <List
                     style={{ marginTop: 12 }}
                     bordered
-                    locale={{ emptyText: "阶段 5 开始后，这里才会出现二维码明细。" }}
+                    locale={{ emptyText: "当前批次还没有二维码，先点击“生成本批次二维码”。" }}
                     dataSource={selectedBatchDetail.qrItems}
                     renderItem={(item) => (
                       <List.Item>
@@ -384,7 +398,7 @@ export function BatchesPage() {
                   <List
                     style={{ marginTop: 12 }}
                     bordered
-                    locale={{ emptyText: "阶段 6 和阶段 7 扫码后，这里才会出现库存流水。" }}
+                    locale={{ emptyText: "当前批次还没有库存流水，先去仓储管理完成扫码入库或扫码出库。" }}
                     dataSource={selectedBatchDetail.stockMovements}
                     renderItem={(item) => (
                       <List.Item>

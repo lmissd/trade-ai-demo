@@ -30,6 +30,7 @@ import {
   StopOutlined
 } from "@ant-design/icons";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { WarehouseInventorySection, type InventorySummaryResponse } from "../components/WarehouseInventorySection";
 import { requestJson } from "../lib/api";
 
 type ScanMode = "INBOUND" | "OUTBOUND";
@@ -228,6 +229,8 @@ export function WarehousePage() {
   const [cameraBusy, setCameraBusy] = useState(false);
   const [lastSuccessMessage, setLastSuccessMessage] = useState<string | null>(null);
   const [exceptionRecords, setExceptionRecords] = useState<ExceptionRecord[]>([]);
+  const [inventorySummary, setInventorySummary] = useState<InventorySummaryResponse | null>(null);
+  const [isInventoryLoading, setIsInventoryLoading] = useState(false);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerRegionId = "warehouse-camera-scanner";
@@ -298,6 +301,19 @@ export function WarehousePage() {
       dataIndex: "message"
     }
   ];
+
+  async function loadInventorySummary() {
+    setIsInventoryLoading(true);
+
+    try {
+      const summary = await requestJson<InventorySummaryResponse>("/api/inventory/summary");
+      setInventorySummary(summary);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载库存真实统计失败。");
+    } finally {
+      setIsInventoryLoading(false);
+    }
+  }
 
   async function loadContext(nextMode: ScanMode, batchId?: string) {
     setIsContextLoading(true);
@@ -414,7 +430,7 @@ export function WarehousePage() {
         ...previous,
         [mode]: result.context
       }));
-      await loadContext(mode === "INBOUND" ? "OUTBOUND" : "INBOUND", context.batch.id);
+      await Promise.all([loadContext(mode === "INBOUND" ? "OUTBOUND" : "INBOUND", context.batch.id), loadInventorySummary()]);
       setLastSuccessMessage(`${meta.successText}：${result.qrItem.qrCode}`);
       setIsPreviewVisible(false);
       setPreview(null);
@@ -459,7 +475,7 @@ export function WarehousePage() {
         ...previous,
         [mode]: result.context
       }));
-      await loadContext(mode === "INBOUND" ? "OUTBOUND" : "INBOUND", context.batch.id);
+      await Promise.all([loadContext(mode === "INBOUND" ? "OUTBOUND" : "INBOUND", context.batch.id), loadInventorySummary()]);
 
       if (result.failures.length > 0) {
         setExceptionRecords((previous) => [
@@ -540,6 +556,7 @@ export function WarehousePage() {
 
   useEffect(() => {
     void Promise.all([loadContext("INBOUND"), loadContext("OUTBOUND")]);
+    void loadInventorySummary();
   }, []);
 
   useEffect(() => {
@@ -786,6 +803,15 @@ export function WarehousePage() {
           </Card>
         </Col>
       </Row>
+
+      <WarehouseInventorySection
+        data={inventorySummary}
+        loading={isInventoryLoading}
+        onRefresh={() => void loadInventorySummary()}
+        currentBatchId={context?.batch.id}
+        currentContractId={context?.contract.id}
+        currentWarehouseId={context?.warehouse.id}
+      />
 
       <Modal
         open={isPreviewVisible}
