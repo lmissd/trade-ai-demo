@@ -367,6 +367,54 @@ a {
   border: 1px solid rgba(197, 90, 17, 0.12);
 }
 
+.warehouse-workspace {
+  align-items: start;
+}
+
+.warehouse-mode-tag {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.warehouse-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.warehouse-camera-panel {
+  min-height: 320px;
+  border: 1px dashed rgba(23, 36, 58, 0.18);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(247, 250, 252, 0.92), rgba(255, 248, 239, 0.88));
+  overflow: hidden;
+  position: relative;
+}
+
+.warehouse-camera-panel.is-active {
+  border-style: solid;
+  border-color: rgba(197, 90, 17, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(197, 90, 17, 0.06);
+}
+
+.warehouse-camera-placeholder {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  color: #526072;
+  text-align: center;
+  padding: 24px;
+}
+
+.warehouse-camera-placeholder .anticon {
+  font-size: 28px;
+  color: #c55a11;
+}
+
+.warehouse-confirm-panel .ant-alert {
+  margin: 0;
+}
+
 @media (max-width: 991px) {
   .app-sidebar {
     position: static;
@@ -385,5 +433,14 @@ a {
 
   .app-page {
     padding: 18px;
+  }
+
+  .warehouse-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .warehouse-camera-panel,
+  .warehouse-camera-placeholder {
+    min-height: 260px;
   }
 }

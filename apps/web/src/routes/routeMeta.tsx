@@ -59,7 +59,7 @@ export const routeMetaByPath: Record<string, RouteMeta> = {
   },
   "/warehouse": {
     title: "仓储管理",
-    subtitle: "后续会把预收货、扫码收货、库存管理和销售出库统一收敛到这个核心模块。"
+    subtitle: "预收货、扫码入库、扫码出库和库存状态已经统一收敛到这个核心真实工作台。"
   },
   "/sales": {
     title: "销售与配送",

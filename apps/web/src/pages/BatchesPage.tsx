@@ -16,7 +16,8 @@ import {
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { ReloadOutlined } from "@ant-design/icons";
+import { QrcodeOutlined, ReloadOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import { requestJson } from "../lib/api";
 
 type BatchListRecord = {
@@ -117,11 +118,13 @@ function formatDateTime(value?: string | null) {
 }
 
 export function BatchesPage() {
+  const navigate = useNavigate();
   const [batches, setBatches] = useState<BatchListRecord[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [selectedBatchDetail, setSelectedBatchDetail] = useState<BatchDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [generatingBatchId, setGeneratingBatchId] = useState<string | null>(null);
 
   const selectedBatch = useMemo(
     () => batches.find((item) => item.id === selectedBatchId) ?? null,
@@ -159,6 +162,27 @@ export function BatchesPage() {
       message.error(error instanceof Error ? error.message : "加载批次详情失败。");
     } finally {
       setIsDetailLoading(false);
+    }
+  }
+
+  async function handleGenerateQr(batchId: string) {
+    setGeneratingBatchId(batchId);
+
+    try {
+      const result = await requestJson<{ created: boolean; message: string }>("/api/qr-items/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ batchId })
+      });
+
+      message.success(result.created ? "本批次二维码已生成。" : "该批次已经生成过二维码。");
+      await Promise.all([loadBatches(), loadBatchDetail(batchId)]);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "生成二维码失败。");
+    } finally {
+      setGeneratingBatchId(null);
     }
   }
 
@@ -320,6 +344,20 @@ export function BatchesPage() {
                   message="当前二维码与库存状态"
                   description={`已生成二维码 ${selectedBatchDetail.qrSummary.total} 个；在库 ${selectedBatchDetail.qrSummary.inStock} 个；待入库 ${selectedBatchDetail.qrSummary.pendingInbound} 个。当前阶段正常情况下应全部为 0。`}
                 />
+
+                <Space wrap>
+                  <Button
+                    type="primary"
+                    icon={<QrcodeOutlined />}
+                    loading={generatingBatchId === selectedBatchDetail.id}
+                    onClick={() => void handleGenerateQr(selectedBatchDetail.id)}
+                  >
+                    生成本批次二维码
+                  </Button>
+                  <Button icon={<QrcodeOutlined />} onClick={() => navigate("/qr-items")}>
+                    查看二维码追溯
+                  </Button>
+                </Space>
 
                 <div>
                   <Typography.Text strong>二维码准备状态</Typography.Text>

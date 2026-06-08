@@ -5,7 +5,9 @@ import { contractsRouter } from "./routes/contracts";
 import { uploadsRoot } from "./config/paths";
 import { documentsRouter } from "./routes/documents";
 import { healthRouter } from "./routes/health";
+import { qrItemsRouter } from "./routes/qr-items";
 import { setupRouter } from "./routes/setup";
+import { warehouseRouter } from "./routes/warehouse";
 
 export function createApp() {
   const app = express();
@@ -26,6 +28,8 @@ export function createApp() {
   app.use("/api/documents", documentsRouter);
   app.use("/api/contracts", contractsRouter);
   app.use("/api/batches", batchesRouter);
+  app.use("/api/qr-items", qrItemsRouter);
+  app.use("/api/warehouse", warehouseRouter);
 
   return app;
 }
