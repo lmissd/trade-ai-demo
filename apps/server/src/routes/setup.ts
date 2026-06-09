@@ -1,8 +1,12 @@
 import { Router } from "express";
 import { demoScenarioConfig } from "../config/demoScenario";
 import { prisma } from "../lib/prisma";
+import { buildStandardDemoScenario } from "../services/demoFoundation";
+import { resetDemoEnvironment } from "../services/demoReset";
 
 export const setupRouter = Router();
+const RESET_DEMO_CONFIRMATION_PHRASE = "我是最高权限用户";
+const RESET_DEMO_REQUIRED_ROLE = "OWNER";
 
 setupRouter.get("/status", async (_request, response) => {
   const [counts, demoUser, activeDemoConfig] = await Promise.all([
@@ -214,9 +218,45 @@ setupRouter.get("/status", async (_request, response) => {
       }
     },
     demoUser,
+    resetCapability: {
+      enabled: true,
+      action: "POST /api/setup/reset-demo",
+      scope:
+        "重置当前演示业务数据与演示文件，回到空白演示起点；基础组织、角色、仓库和运行时 AI 配置会被保留，默认单据图片请从 pics 目录手动上传。",
+      confirmationRequired: true,
+      confirmationPhrase: RESET_DEMO_CONFIRMATION_PHRASE,
+      highestPrivilegeRole: RESET_DEMO_REQUIRED_ROLE
+    },
+    standardDemoScenario: buildStandardDemoScenario(),
     demoScenario: activeDemoConfig ?? {
       ...demoScenarioConfig,
       status: "ENV_FALLBACK"
     }
   });
+});
+
+setupRouter.post("/reset-demo", async (request, response) => {
+  const highestPrivilegeConfirmed = request.body?.highestPrivilegeConfirmed === true;
+  const confirmationText =
+    typeof request.body?.confirmationText === "string" ? request.body.confirmationText.trim() : "";
+
+  if (!highestPrivilegeConfirmed || confirmationText !== RESET_DEMO_CONFIRMATION_PHRASE) {
+    response.status(403).json({
+      message: `该操作只允许最高权限用户执行。请勾选确认并输入“${RESET_DEMO_CONFIRMATION_PHRASE}”后重试。`
+    });
+    return;
+  }
+
+  try {
+    const result = await resetDemoEnvironment(prisma);
+
+    response.json({
+      ok: true,
+      ...result
+    });
+  } catch (error) {
+    response.status(500).json({
+      message: error instanceof Error ? error.message : "重置演示环境失败。"
+    });
+  }
 });

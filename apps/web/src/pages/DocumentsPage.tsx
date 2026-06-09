@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Col,
   Descriptions,
   Empty,
@@ -15,6 +16,7 @@ import {
   Row,
   Space,
   Statistic,
+  Steps,
   Table,
   Tag,
   Typography,
@@ -196,6 +198,69 @@ type DocumentReplaceResponse = {
   previousDocument: DocumentRecord | null;
 };
 
+type DemoScenarioSummary = {
+  scenarioName: string;
+  origin: string;
+  destinationWarehouse: string;
+  customerName: string;
+  supplierName: string;
+  productName: string;
+  totalQuantity: number;
+  unit: string;
+  plannedOutboundQuantity: number;
+  amount: number;
+  currency: string;
+  expectedRemainingQuantity?: number;
+  storyline?: string;
+  updatedAt?: string;
+  status?: string;
+};
+
+type SetupStatusResponse = {
+  resetCapability: {
+    enabled: boolean;
+    action: string;
+    scope: string;
+    confirmationRequired?: boolean;
+    confirmationPhrase?: string;
+    highestPrivilegeRole?: string;
+  };
+  standardDemoScenario: DemoScenarioSummary;
+  demoScenario: DemoScenarioSummary;
+};
+
+type ResetDemoResponse = {
+  ok: boolean;
+  message: string;
+  fileWarnings: string[];
+  preserved: {
+    aiAssistantRuntimeConfig: boolean;
+  };
+  standardScenario: DemoScenarioSummary;
+  activeScenario: DemoScenarioSummary | null;
+  countsAfter: {
+    documents: number;
+    contracts: number;
+    batches: number;
+    qrItems: number;
+    stockMovements: number;
+    purchaseOrders: number;
+    shipments: number;
+    workOrders: number;
+  };
+};
+
+type DocumentPreparedStatus = "missing" | "uploaded" | "recognized";
+type BusinessDocumentGate = {
+  pairKey: string | null;
+  hasContract: boolean;
+  hasPackingList: boolean;
+  isReady: boolean;
+  message: string;
+};
+
+const DEFAULT_RESET_CONFIRMATION_PHRASE = "我是最高权限用户";
+
 const documentTypeOptions: Array<{ label: string; value: DocumentType }> = [
   { label: "合同", value: "CONTRACT" },
   { label: "箱单", value: "PACKING_LIST" },
@@ -348,6 +413,128 @@ function getBusinessStatusTag(document: DocumentRecord) {
   return <Tag color="default">仍是草稿</Tag>;
 }
 
+function getPreparedStatus(
+  documents: DocumentRecord[],
+  documentType: DocumentType
+): DocumentPreparedStatus {
+  const typedDocuments = documents.filter((item) => item.documentType === documentType);
+
+  if (typedDocuments.some((item) => item.aiStatus === "EXTRACTED")) {
+    return "recognized";
+  }
+
+  if (typedDocuments.length > 0) {
+    return "uploaded";
+  }
+
+  return "missing";
+}
+
+function renderPreparedStatusTag(label: string, status: DocumentPreparedStatus) {
+  const config: Record<DocumentPreparedStatus, { color: string; text: string }> = {
+    missing: { color: "default", text: "缺少" },
+    uploaded: { color: "warning", text: "已上传待识别" },
+    recognized: { color: "success", text: "已识别" }
+  };
+
+  return (
+    <Tag color={config[status].color}>
+      {label}：{config[status].text}
+    </Tag>
+  );
+}
+
+function readDraftValue(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getDocumentDraftPairKey(document: DocumentRecord) {
+  const extracted =
+    document.extractedJson && typeof document.extractedJson === "object" && !Array.isArray(document.extractedJson)
+      ? document.extractedJson
+      : null;
+
+  const contractNoDraft =
+    readDraftValue(extracted?.contractNoDraft) ?? readDraftValue(document.contractNoDraft);
+  const batchNoDraft =
+    readDraftValue(extracted?.batchNoDraft) ?? readDraftValue(document.batchNoDraft);
+
+  if (!contractNoDraft || !batchNoDraft) {
+    return null;
+  }
+
+  return `${contractNoDraft}::${batchNoDraft}`;
+}
+
+function getBusinessDocumentGateForDocument(
+  documents: DocumentRecord[],
+  document: DocumentRecord
+): BusinessDocumentGate {
+  const pairKey = getDocumentDraftPairKey(document);
+
+  if (!pairKey) {
+    return {
+      pairKey: null,
+      hasContract: false,
+      hasPackingList: false,
+      isReady: false,
+      message: "请先补全这票业务的合同草稿号和批次草稿号，再准备合同与箱单。"
+    };
+  }
+
+  const pairDocuments = documents.filter(
+    (item) =>
+      item.status === "ACTIVE" &&
+      item.aiStatus === "EXTRACTED" &&
+      getDocumentDraftPairKey(item) === pairKey
+  );
+
+  const hasContract = pairDocuments.some((item) => item.documentType === "CONTRACT");
+  const hasPackingList = pairDocuments.some((item) => item.documentType === "PACKING_LIST");
+
+  if (hasContract && hasPackingList) {
+    return {
+      pairKey,
+      hasContract: true,
+      hasPackingList: true,
+      isReady: true,
+      message: "当前这票业务已具备已识别的合同和箱单，可以确认生成正式业务数据。"
+    };
+  }
+
+  const missingParts = [
+    hasContract ? null : "合同",
+    hasPackingList ? null : "箱单"
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    pairKey,
+    hasContract,
+    hasPackingList,
+    isReady: false,
+    message: `当前这票业务缺少已识别的${missingParts.join(" + ")}，暂不能生成正式业务数据。`
+  };
+}
+
+function hasAnyReadyBusinessDocumentPair(documents: DocumentRecord[]) {
+  const seenPairs = new Set<string>();
+
+  for (const document of documents) {
+    const pairKey = getDocumentDraftPairKey(document);
+    if (!pairKey || seenPairs.has(pairKey)) {
+      continue;
+    }
+
+    seenPairs.add(pairKey);
+
+    if (getBusinessDocumentGateForDocument(documents, document).isReady) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function getHistoryLabel(document: DocumentRecord) {
   const name = document.originalName ?? document.fileName;
   return `V${document.version} · ${name}`;
@@ -358,6 +545,7 @@ export function DocumentsPage() {
   const [form] = Form.useForm<ExtractionFormValues>();
   const [voidForm] = Form.useForm<{ reason: string }>();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [setupStatus, setSetupStatus] = useState<SetupStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -366,6 +554,7 @@ export function DocumentsPage() {
   const [isVoiding, setIsVoiding] = useState(false);
   const [isReplacing, setIsReplacing] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [uploadType, setUploadType] = useState<DocumentType>("CONTRACT");
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [extractingDocumentId, setExtractingDocumentId] = useState<string | null>(null);
@@ -376,6 +565,9 @@ export function DocumentsPage() {
   const [replaceFileList, setReplaceFileList] = useState<UploadFile[]>([]);
   const [historyTarget, setHistoryTarget] = useState<DocumentRecord | null>(null);
   const [historyDocuments, setHistoryDocuments] = useState<DocumentRecord[]>([]);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [highestPrivilegeConfirmed, setHighestPrivilegeConfirmed] = useState(false);
+  const [resetConfirmationText, setResetConfirmationText] = useState("");
 
   const selectedDocument = useMemo(
     () => documents.find((item) => item.id === selectedDocumentId) ?? null,
@@ -389,7 +581,68 @@ export function DocumentsPage() {
   const extractedCount = activeDocuments.filter((item) => item.aiStatus === "EXTRACTED").length;
   const generatedCount = activeDocuments.filter((item) => item.businessCreated).length;
   const pendingCount = activeDocuments.filter((item) => item.aiStatus === "PENDING").length;
+  const contractPreparedStatus = getPreparedStatus(activeDocuments, "CONTRACT");
+  const packingListPreparedStatus = getPreparedStatus(activeDocuments, "PACKING_LIST");
+  const billOfLadingPreparedStatus = getPreparedStatus(activeDocuments, "BILL_OF_LADING");
+  const invoicePreparedStatus = getPreparedStatus(activeDocuments, "INVOICE");
+  const hasMinimumBusinessDocuments = hasAnyReadyBusinessDocumentPair(activeDocuments);
+  const selectedDocumentBusinessGate = selectedDocument
+    ? getBusinessDocumentGateForDocument(activeDocuments, selectedDocument)
+    : null;
+  const matureDocumentSteps = [
+    {
+      title: "正式业务数据生成前",
+      status: hasMinimumBusinessDocuments ? "finish" : "process",
+      description: hasMinimumBusinessDocuments
+        ? "当前至少已有一份已识别合同和一份已识别箱单，成熟版通常会在这个基础上再做人工核对后生成正式合同、明细和批次。"
+        : "成熟版通常建议先识别并核对“合同 + 箱单”，再确认生成正式业务数据。"
+    },
+    {
+      title: "国际物流阶段",
+      status:
+        billOfLadingPreparedStatus === "recognized"
+          ? "finish"
+          : hasMinimumBusinessDocuments
+            ? "process"
+            : "wait",
+      description:
+        billOfLadingPreparedStatus === "recognized"
+          ? "当前已识别提单，后续可以继续承接柜号、船期、港口和运输节点。"
+          : "通常在货代出单后补传提单，再进入更完整的国际物流追踪。"
+    },
+    {
+      title: "报关 / 清关阶段",
+      status:
+        invoicePreparedStatus === "recognized" && billOfLadingPreparedStatus === "recognized"
+          ? "finish"
+          : invoicePreparedStatus === "recognized" || billOfLadingPreparedStatus === "recognized"
+            ? "process"
+            : "wait",
+      description:
+        invoicePreparedStatus === "recognized"
+          ? "当前已识别发票；成熟版清关时通常还会结合箱单、提单和其他资料做一致性校验。"
+          : "成熟版通常会在清关前补齐发票，并与箱单、提单、其他资料一起校验。"
+    },
+    {
+      title: "库存真正生效",
+      status: "wait",
+      description:
+        "库存不会因为合同、箱单、发票或提单自动增加。只有生成二维码并完成扫码入库后，库存才会真正生效。"
+    },
+    {
+      title: "财务真正完成",
+      status: "wait",
+      description:
+        "应收可以先生成草稿，但真正回款、核销与财务完成，要在后续销售交付和财务回款阶段处理。"
+    }
+  ] as const;
   const notes = useMemo(() => readNotes(selectedDocument), [selectedDocument]);
+  const standardScenario = setupStatus?.standardDemoScenario ?? null;
+  const activeScenario = setupStatus?.demoScenario ?? null;
+  const resetConfirmationPhrase =
+    setupStatus?.resetCapability.confirmationPhrase ?? DEFAULT_RESET_CONFIRMATION_PHRASE;
+  const isResetConfirmationValid =
+    highestPrivilegeConfirmed && resetConfirmationText.trim() === resetConfirmationPhrase;
 
   async function loadDocuments() {
     setIsLoading(true);
@@ -409,6 +662,15 @@ export function DocumentsPage() {
       message.error(error instanceof Error ? error.message : "加载单据列表失败。");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadSetupStatus() {
+    try {
+      const nextStatus = await requestJson<SetupStatusResponse>("/api/setup/status");
+      setSetupStatus(nextStatus);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载演示环境状态失败。");
     }
   }
 
@@ -506,8 +768,17 @@ export function DocumentsPage() {
 
   async function handleConfirmBusinessData(documentId?: string) {
     const targetDocumentId = documentId ?? selectedDocument?.id;
+    const targetDocument =
+      documents.find((item) => item.id === targetDocumentId) ?? selectedDocument ?? null;
 
-    if (!targetDocumentId) {
+    if (!targetDocumentId || !targetDocument) {
+      return;
+    }
+
+    const businessDocumentGate = getBusinessDocumentGateForDocument(activeDocuments, targetDocument);
+
+    if (!businessDocumentGate.isReady) {
+      message.warning(businessDocumentGate.message);
       return;
     }
 
@@ -672,8 +943,55 @@ export function DocumentsPage() {
     }
   }
 
+  async function handleResetDemoEnvironment() {
+    if (!isResetConfirmationValid) {
+      message.warning(`请先勾选最高权限确认，并输入“${resetConfirmationPhrase}”。`);
+      return;
+    }
+
+    setIsResetting(true);
+
+    try {
+      const result = await requestJson<ResetDemoResponse>("/api/setup/reset-demo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          highestPrivilegeConfirmed: true,
+          confirmationText: resetConfirmationText.trim()
+        })
+      });
+
+      setSelectedDocumentId(null);
+      setLatestBusinessResult(null);
+      setDeleteTarget(null);
+      setVoidTarget(null);
+      setReplaceTarget(null);
+      setReplaceFileList([]);
+      setHistoryTarget(null);
+      setHistoryDocuments([]);
+      setIsResetModalOpen(false);
+      setHighestPrivilegeConfirmed(false);
+      setResetConfirmationText("");
+
+      await Promise.all([loadDocuments(), loadSetupStatus()]);
+
+      message.success(result.message);
+
+      if (result.fileWarnings.length > 0) {
+        message.warning(result.fileWarnings.join("；"));
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "重置演示环境失败。");
+    } finally {
+      setIsResetting(false);
+    }
+  }
+
   useEffect(() => {
     void loadDocuments();
+    void loadSetupStatus();
   }, []);
 
   useEffect(() => {
@@ -746,7 +1064,10 @@ export function DocumentsPage() {
       title: "操作",
       key: "actions",
       width: 380,
-      render: (_, record) => (
+      render: (_, record) => {
+        const recordBusinessGate = getBusinessDocumentGateForDocument(activeDocuments, record);
+
+        return (
         <Space wrap>
           <Button size="small" onClick={() => setSelectedDocumentId(record.id)}>
             查看
@@ -784,6 +1105,8 @@ export function DocumentsPage() {
             <Button
               size="small"
               icon={<CheckCircleOutlined />}
+              disabled={!recordBusinessGate.isReady}
+              title={recordBusinessGate.isReady ? undefined : recordBusinessGate.message}
               loading={isConfirmingBusinessData && selectedDocument?.id === record.id}
               onClick={(event) => {
                 event.stopPropagation();
@@ -848,7 +1171,8 @@ export function DocumentsPage() {
             </Button>
           ) : null}
         </Space>
-      )
+      );
+      }
     }
   ];
 
@@ -947,6 +1271,115 @@ export function DocumentsPage() {
                 message="当前规则"
                 description="AI 识别结果默认来自后端 DemoConfig。删除与作废都会进入 AuditLog；已生成业务数据的单据不能删除，只能作废或替换，且不会影响合同、批次、二维码和库存流水。"
               />
+
+              <Card size="small" className="placeholder-card" title="成熟版关键节点提醒">
+                <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                  <Space wrap>
+                    {renderPreparedStatusTag("合同", contractPreparedStatus)}
+                    {renderPreparedStatusTag("箱单", packingListPreparedStatus)}
+                    {renderPreparedStatusTag("提单", billOfLadingPreparedStatus)}
+                    {renderPreparedStatusTag("发票", invoicePreparedStatus)}
+                  </Space>
+
+                  <Alert
+                    type={hasMinimumBusinessDocuments ? "success" : "warning"}
+                    showIcon
+                    message={
+                      hasMinimumBusinessDocuments
+                        ? "成熟版首轮业务生成建议条件已满足"
+                        : "成熟版建议先补齐合同 + 箱单"
+                    }
+                    description={
+                      hasMinimumBusinessDocuments
+                        ? "你现在至少已经有一份已识别合同和一份已识别箱单。建议继续人工核对无误后，再生成正式业务数据。"
+                        : "当前 Demo 仍可继续演示，但按成熟版本思路，通常不会只凭单张单据就直接进入正式业务数据。"
+                    }
+                  />
+
+                  <Steps
+                    size="small"
+                    direction="vertical"
+                    items={matureDocumentSteps.map((item) => ({
+                      title: item.title,
+                      status: item.status,
+                      description: item.description
+                    }))}
+                  />
+                </Space>
+              </Card>
+
+              <Card size="small" className="placeholder-card">
+                <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                  <div>
+                    <Typography.Text strong>演示管理员</Typography.Text>
+                    <Typography.Paragraph type="secondary" style={{ margin: "8px 0 0" }}>
+                      一键清空当前演示业务数据并回到空白演示起点。会清空当前单据、合同、批次、二维码、库存流水、
+                      采购/物流/工单等演示业务数据，但保留基础组织、仓库和网页 AI 升级配置。默认演示单据图片已放在
+                      `pics` 目录，需要你手动上传开始识别。
+                    </Typography.Paragraph>
+                  </div>
+
+                  {standardScenario ? (
+                    <Descriptions
+                      bordered
+                      size="small"
+                      column={1}
+                      items={[
+                        {
+                          key: "scenario",
+                          label: "标准场景",
+                          children: standardScenario.scenarioName
+                        },
+                        {
+                          key: "route",
+                          label: "默认路线",
+                          children: `${standardScenario.origin} → ${standardScenario.destinationWarehouse}`
+                        },
+                        {
+                          key: "goods",
+                          label: "默认货物",
+                          children: `${standardScenario.productName} · ${standardScenario.totalQuantity}${standardScenario.unit}`
+                        },
+                        {
+                          key: "outbound",
+                          label: "计划出库",
+                          children: `${standardScenario.plannedOutboundQuantity}${standardScenario.unit}`
+                        },
+                        {
+                          key: "remaining",
+                          label: "理论剩余",
+                          children: `${standardScenario.expectedRemainingQuantity ?? Math.max(
+                            standardScenario.totalQuantity - standardScenario.plannedOutboundQuantity,
+                            0
+                          )}${standardScenario.unit}`
+                        }
+                      ]}
+                    />
+                  ) : (
+                    <Alert type="warning" showIcon message="标准演示场景加载中" />
+                  )}
+
+                  {activeScenario ? (
+                    <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                      当前激活 DemoConfig：{activeScenario.customerName} / {activeScenario.supplierName} /{" "}
+                      {activeScenario.amount} {activeScenario.currency}
+                    </Typography.Paragraph>
+                  ) : null}
+
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                    默认素材目录：`D:\国际贸易多公司一体化管理系统\pics`
+                  </Typography.Paragraph>
+
+                  <Button
+                    danger
+                    icon={<ReloadOutlined />}
+                    onClick={() => setIsResetModalOpen(true)}
+                    disabled={!setupStatus?.resetCapability.enabled}
+                  >
+                    回到空白演示起点
+                  </Button>
+                </Space>
+              </Card>
             </Space>
           </Card>
         </Col>
@@ -1154,10 +1587,18 @@ export function DocumentsPage() {
 
                 {selectedDocument.aiStatus === "EXTRACTED" && !selectedDocument.businessCreated && selectedDocument.status === "ACTIVE" ? (
                   <Alert
-                    type="info"
+                    type={selectedDocumentBusinessGate?.isReady ? "info" : "warning"}
                     showIcon
-                    message="当前仍是识别草稿"
-                    description="这里展示的字段还只是识别草稿。你可以先人工修正，再确认生成业务数据。删除草稿单据不会影响任何库存。"
+                    message={
+                      selectedDocumentBusinessGate?.isReady
+                        ? "当前仍是识别草稿"
+                        : "当前仍是识别草稿，且暂不满足正式生成条件"
+                    }
+                    description={
+                      selectedDocumentBusinessGate?.isReady
+                        ? "这里展示的字段还只是识别草稿。你可以先人工修正，再确认生成业务数据。删除草稿单据不会影响任何库存。"
+                        : `${selectedDocumentBusinessGate?.message ?? "当前这票业务还缺少必要单据。"} 删除草稿单据不会影响任何库存。`
+                    }
                   />
                 ) : null}
 
@@ -1294,6 +1735,8 @@ export function DocumentsPage() {
                     {canConfirmBusinessData(selectedDocument) ? (
                       <Button
                         icon={<CheckCircleOutlined />}
+                        disabled={!selectedDocumentBusinessGate?.isReady}
+                        title={selectedDocumentBusinessGate?.isReady ? undefined : selectedDocumentBusinessGate?.message}
                         loading={isConfirmingBusinessData}
                         onClick={() => void handleConfirmBusinessData()}
                       >
@@ -1342,6 +1785,22 @@ export function DocumentsPage() {
                   ) : (
                     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
                       <Alert
+                        type={selectedDocumentBusinessGate?.isReady ? "success" : "warning"}
+                        showIcon
+                        message={
+                          selectedDocumentBusinessGate?.isReady
+                            ? "成熟版建议条件已满足：合同 + 箱单"
+                            : "成熟版建议条件未满足：至少准备合同 + 箱单"
+                        }
+                        description={
+                          selectedDocumentBusinessGate?.isReady
+                            ? "当前这票业务已至少具备一份已识别合同和一份已识别箱单。你可以继续修正字段，再决定是否确认生成正式业务数据。"
+                            : selectedDocumentBusinessGate?.message ??
+                              "当前这票业务还不满足生成正式业务数据的前置条件。"
+                        }
+                      />
+
+                      <Alert
                         type="warning"
                         showIcon
                         message="还没有生成正式业务数据"
@@ -1352,7 +1811,8 @@ export function DocumentsPage() {
                         type="primary"
                         icon={<CheckCircleOutlined />}
                         loading={isConfirmingBusinessData}
-                        disabled={!canConfirmBusinessData(selectedDocument)}
+                        disabled={!canConfirmBusinessData(selectedDocument) || !selectedDocumentBusinessGate?.isReady}
+                        title={selectedDocumentBusinessGate?.isReady ? undefined : selectedDocumentBusinessGate?.message}
                         onClick={() => void handleConfirmBusinessData()}
                       >
                         确认生成业务数据
@@ -1381,6 +1841,92 @@ export function DocumentsPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="回到空白演示起点"
+        open={isResetModalOpen}
+        onCancel={() => {
+          setIsResetModalOpen(false);
+          setHighestPrivilegeConfirmed(false);
+          setResetConfirmationText("");
+        }}
+        onOk={() => void handleResetDemoEnvironment()}
+        confirmLoading={isResetting}
+        okText="确认重置"
+        okButtonProps={{ danger: true, disabled: !isResetConfirmationValid }}
+        cancelText="取消"
+      >
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Alert
+            type="warning"
+            showIcon
+            message="这会回到空白演示起点"
+            description={
+              standardScenario
+                ? `将删除当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片。重置后系统只保留标准场景参数与基础底座，不再自动生成单据、合同、批次和库存；请从 pics 目录手动上传默认图片开始演示。`
+                : "将删除当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片。重置后系统会回到空白演示起点。"
+            }
+          />
+
+          {standardScenario ? (
+            <Descriptions
+              bordered
+              size="small"
+              column={1}
+              items={[
+                {
+                  key: "scenario",
+                  label: "恢复后的标准场景",
+                  children: standardScenario.scenarioName
+                },
+                {
+                  key: "route",
+                  label: "默认路线",
+                  children: `${standardScenario.origin} → ${standardScenario.destinationWarehouse}`
+                },
+                {
+                  key: "demo",
+                  label: "默认演示参数",
+                  children: `${standardScenario.productName} / ${standardScenario.totalQuantity}${standardScenario.unit} / 出库 ${standardScenario.plannedOutboundQuantity}${standardScenario.unit}`
+                },
+                {
+                  key: "note",
+                  label: "恢复后状态",
+                  children:
+                    "回到“合同与单据列表为空、由用户手动上传 pics 目录中的默认图片开始识别”的空白演示状态。"
+                }
+              ]}
+            />
+          ) : null}
+
+          <Alert
+            type="error"
+            showIcon
+            message="仅最高权限用户可执行"
+            description={`请确认你当前以最高权限角色（${setupStatus?.resetCapability.highestPrivilegeRole ?? "OWNER"}）操作。未完成下方确认前，系统不会执行重新测试或重置。`}
+          />
+
+          <Checkbox
+            checked={highestPrivilegeConfirmed}
+            onChange={(event) => setHighestPrivilegeConfirmed(event.target.checked)}
+          >
+            我确认当前是最高权限用户，并且了解这会清空当前演示业务数据
+          </Checkbox>
+
+          <div>
+            <Typography.Text strong>请输入确认短语</Typography.Text>
+            <Input
+              style={{ marginTop: 8 }}
+              value={resetConfirmationText}
+              onChange={(event) => setResetConfirmationText(event.target.value)}
+              placeholder={resetConfirmationPhrase}
+            />
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              需要完整输入：{resetConfirmationPhrase}
+            </Typography.Paragraph>
+          </div>
+        </Space>
+      </Modal>
 
       <Modal
         title="删除单据"

@@ -421,6 +421,39 @@ function parseConfirmedDraft(document: DocumentWithSummary): ConfirmedDocumentDr
   };
 }
 
+async function ensureRequiredBusinessDocuments(
+  tx: Prisma.TransactionClient,
+  draft: ConfirmedDocumentDraft
+) {
+  const pairedDocuments = await tx.document.findMany({
+    where: {
+      status: DocumentStatus.ACTIVE,
+      aiStatus: DocumentAiStatus.EXTRACTED,
+      contractNoDraft: draft.contractNo,
+      batchNoDraft: draft.batchNo
+    },
+    select: {
+      documentType: true
+    }
+  });
+
+  const hasContract = pairedDocuments.some((item) => item.documentType === DocumentType.CONTRACT);
+  const hasPackingList = pairedDocuments.some((item) => item.documentType === DocumentType.PACKING_LIST);
+
+  if (hasContract && hasPackingList) {
+    return;
+  }
+
+  const missingDocumentTypes = [
+    hasContract ? null : "合同",
+    hasPackingList ? null : "箱单"
+  ].filter((item): item is string => Boolean(item));
+
+  throw new BusinessConflictError(
+    `当前这票业务还缺少已识别的${missingDocumentTypes.join(" + ")}，暂不能生成正式业务数据。`
+  );
+}
+
 async function resolveBusinessReferences(
   tx: Prisma.TransactionClient,
   draft: ConfirmedDocumentDraft
@@ -1104,6 +1137,8 @@ documentsRouter.post("/:id/confirm", async (request, response) => {
       }
 
       const draft = parseConfirmedDraft(document);
+      await ensureRequiredBusinessDocuments(tx, draft);
+
       const [duplicateContract, duplicateBatch] = await Promise.all([
         tx.contract.findUnique({
           where: { contractNo: draft.contractNo },

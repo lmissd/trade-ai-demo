@@ -9,9 +9,13 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Col,
+  Descriptions,
   Empty,
+  Input,
   List,
+  Modal,
   Progress,
   Row,
   Select,
@@ -29,6 +33,70 @@ import { requestJson } from "../lib/api";
 
 type DashboardTone = "success" | "processing" | "warning" | "default" | "error";
 type DashboardOrderView = "active" | "completed" | "after_sales" | "exception" | "archived" | "all";
+
+type DemoScenarioSummary = {
+  scenarioName: string;
+  origin: string;
+  destinationWarehouse: string;
+  customerName: string;
+  supplierName: string;
+  productName: string;
+  totalQuantity: number;
+  unit: string;
+  plannedOutboundQuantity: number;
+  amount: number;
+  currency: string;
+  expectedRemainingQuantity?: number;
+  storyline?: string;
+  updatedAt?: string;
+  status?: string;
+};
+
+type SetupStatusResponse = {
+  database: {
+    counts: {
+      documents: number;
+      contracts: number;
+      batches: number;
+      qrItems: number;
+      stockMovements: number;
+      workOrders: number;
+    };
+  };
+  resetCapability: {
+    enabled: boolean;
+    action: string;
+    scope: string;
+    confirmationRequired?: boolean;
+    confirmationPhrase?: string;
+    highestPrivilegeRole?: string;
+  };
+  standardDemoScenario: DemoScenarioSummary;
+  demoScenario: DemoScenarioSummary;
+};
+
+type ResetDemoResponse = {
+  ok: boolean;
+  message: string;
+  fileWarnings: string[];
+  preserved: {
+    aiAssistantRuntimeConfig: boolean;
+  };
+  standardScenario: DemoScenarioSummary;
+  activeScenario: DemoScenarioSummary | null;
+  countsAfter: {
+    documents: number;
+    contracts: number;
+    batches: number;
+    qrItems: number;
+    stockMovements: number;
+    purchaseOrders: number;
+    shipments: number;
+    workOrders: number;
+  };
+};
+
+const DEFAULT_RESET_CONFIRMATION_PHRASE = "我是最高权限用户";
 
 type DashboardOverviewResponse = {
   generatedAt: string;
@@ -202,20 +270,32 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<DashboardOverviewResponse | null>(null);
+  const [setupStatus, setSetupStatus] = useState<SetupStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [highestPrivilegeConfirmed, setHighestPrivilegeConfirmed] = useState(false);
+  const [resetConfirmationText, setResetConfirmationText] = useState("");
   const focusContractId = searchParams.get("focusContractId");
   const orderView = (searchParams.get("orderView") as DashboardOrderView | null) ?? null;
+  const resetConfirmationPhrase =
+    setupStatus?.resetCapability.confirmationPhrase ?? DEFAULT_RESET_CONFIRMATION_PHRASE;
+  const isResetConfirmationValid =
+    highestPrivilegeConfirmed && resetConfirmationText.trim() === resetConfirmationPhrase;
 
-  async function loadDashboardOverview() {
+  async function loadDashboardOverview(
+    nextFocusContractId: string | null = focusContractId,
+    nextOrderView: DashboardOrderView | null = orderView
+  ) {
     setLoading(true);
 
     try {
       const query = new URLSearchParams();
-      if (focusContractId) {
-        query.set("focusContractId", focusContractId);
+      if (nextFocusContractId) {
+        query.set("focusContractId", nextFocusContractId);
       }
-      if (orderView) {
-        query.set("orderView", orderView);
+      if (nextOrderView) {
+        query.set("orderView", nextOrderView);
       }
 
       const nextData = await requestJson<DashboardOverviewResponse>(
@@ -229,9 +309,69 @@ export function DashboardPage() {
     }
   }
 
+  async function loadSetupStatus() {
+    try {
+      const nextStatus = await requestJson<SetupStatusResponse>("/api/setup/status");
+      setSetupStatus(nextStatus);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载演示环境状态失败。");
+    }
+  }
+
+  async function handleRefreshAll() {
+    await Promise.all([loadDashboardOverview(), loadSetupStatus()]);
+  }
+
+  async function handleResetDemoEnvironment() {
+    if (!isResetConfirmationValid) {
+      message.warning(`请先勾选最高权限确认，并输入“${resetConfirmationPhrase}”。`);
+      return;
+    }
+
+    setIsResetting(true);
+
+    try {
+      const result = await requestJson<ResetDemoResponse>("/api/setup/reset-demo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          highestPrivilegeConfirmed: true,
+          confirmationText: resetConfirmationText.trim()
+        })
+      });
+
+      setIsResetModalOpen(false);
+      setHighestPrivilegeConfirmed(false);
+      setResetConfirmationText("");
+      setSearchParams(
+        new URLSearchParams({
+          orderView: "active"
+        })
+      );
+
+      await Promise.all([loadDashboardOverview(null, "active"), loadSetupStatus()]);
+
+      message.success(result.message);
+
+      if (result.fileWarnings.length > 0) {
+        message.warning(result.fileWarnings.join("；"));
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "重置演示环境失败。");
+    } finally {
+      setIsResetting(false);
+    }
+  }
+
   useEffect(() => {
     void loadDashboardOverview();
   }, [focusContractId, orderView]);
+
+  useEffect(() => {
+    void loadSetupStatus();
+  }, []);
 
   const inventoryCards = data
     ? [
@@ -249,7 +389,6 @@ export function DashboardPage() {
     : "待选择";
   const activeOrderPool = data?.orderPools.find((item) => item.key === data.orderView) ?? null;
   const hasFocusedOrder = Boolean(data?.focus.contractId);
-
   return (
     <div className="dashboard-workspace">
       <section className="page-hero dashboard-hero">
@@ -362,9 +501,23 @@ export function DashboardPage() {
                     : "首页默认优先查看进行中的订单，减少已完成订单对驾驶舱的干扰。"}
                 </div>
 
-                <Button icon={<ReloadOutlined />} onClick={() => void loadDashboardOverview()} loading={loading}>
-                  刷新驾驶舱
-                </Button>
+                <Space wrap>
+                  <Button icon={<ReloadOutlined />} onClick={() => void handleRefreshAll()} loading={loading}>
+                    刷新驾驶舱
+                  </Button>
+
+                  {setupStatus?.resetCapability.enabled ? (
+                    <Button
+                      danger
+                      size="small"
+                      icon={<ReloadOutlined />}
+                      onClick={() => setIsResetModalOpen(true)}
+                      loading={isResetting}
+                    >
+                      回到空白起点
+                    </Button>
+                  ) : null}
+                </Space>
               </Space>
             ) : (
               <Skeleton active paragraph={{ rows: 5 }} />
@@ -767,6 +920,89 @@ export function DashboardPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="回到空白演示起点"
+        open={isResetModalOpen}
+        onCancel={() => {
+          setIsResetModalOpen(false);
+          setHighestPrivilegeConfirmed(false);
+          setResetConfirmationText("");
+        }}
+        onOk={() => void handleResetDemoEnvironment()}
+        confirmLoading={isResetting}
+        okText="确认重置"
+        okButtonProps={{ danger: true, disabled: !isResetConfirmationValid }}
+        cancelText="取消"
+      >
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Alert
+            type="warning"
+            showIcon
+            message="这会回到空白演示起点"
+            description={
+              setupStatus
+                ? `将先清空当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片。重置后系统只保留标准场景参数与基础底座，不再自动生成单据、合同、批次和库存；请从 pics 目录手动上传默认图片开始演示。`
+                : "将先清空当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片，然后回到空白演示起点。"
+            }
+          />
+
+          {setupStatus ? (
+            <Descriptions
+              bordered
+              size="small"
+              column={1}
+              items={[
+                {
+                  key: "scenario",
+                  label: "恢复后的标准场景",
+                  children: setupStatus.standardDemoScenario.scenarioName
+                },
+                {
+                  key: "storyline",
+                  label: "默认主线",
+                  children:
+                    setupStatus.standardDemoScenario.storyline ??
+                    `${setupStatus.standardDemoScenario.origin} → ${setupStatus.standardDemoScenario.destinationWarehouse}`
+                },
+                {
+                  key: "result",
+                  label: "重置后状态",
+                  children:
+                    "回到“默认无单据、无合同、无批次、无二维码、无库存，由用户手动上传 pics 目录素材开始”的空白演示状态。"
+                }
+              ]}
+            />
+          ) : null}
+
+          <Alert
+            type="error"
+            showIcon
+            message="仅最高权限用户可执行"
+            description={`请确认你当前以最高权限角色（${setupStatus?.resetCapability.highestPrivilegeRole ?? "OWNER"}）操作。未完成下方确认前，系统不会执行重新测试或重置。`}
+          />
+
+          <Checkbox
+            checked={highestPrivilegeConfirmed}
+            onChange={(event) => setHighestPrivilegeConfirmed(event.target.checked)}
+          >
+            我确认当前是最高权限用户，并且了解这会清空当前演示业务数据
+          </Checkbox>
+
+          <div>
+            <Typography.Text strong>请输入确认短语</Typography.Text>
+            <Input
+              style={{ marginTop: 8 }}
+              value={resetConfirmationText}
+              onChange={(event) => setResetConfirmationText(event.target.value)}
+              placeholder={resetConfirmationPhrase}
+            />
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+              需要完整输入：{resetConfirmationPhrase}
+            </Typography.Paragraph>
+          </div>
+        </Space>
+      </Modal>
     </div>
   );
 }

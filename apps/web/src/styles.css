@@ -457,6 +457,11 @@ a {
   min-width: 0;
 }
 
+.dashboard-hero-main {
+  display: grid;
+  gap: 20px;
+}
+
 .dashboard-scenario-card {
   height: 100%;
   border-radius: 24px !important;
@@ -550,6 +555,30 @@ a {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(248, 250, 252, 0.88);
   font-size: 13px;
+}
+
+.dashboard-admin-card .ant-card-body {
+  display: grid;
+  gap: 16px;
+}
+
+.dashboard-admin-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-admin-grid > div {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(247, 250, 252, 0.96), rgba(255, 248, 239, 0.9));
+}
+
+.dashboard-admin-grid strong {
+  color: #17243a;
+  font-size: 15px;
 }
 
 .dashboard-order-pools {
@@ -704,7 +733,8 @@ a {
   .dashboard-focus-statuses,
   .dashboard-status-grid,
   .dashboard-kpi-grid,
-  .dashboard-mini-grid {
+  .dashboard-mini-grid,
+  .dashboard-admin-grid {
     grid-template-columns: 1fr;
   }
 
