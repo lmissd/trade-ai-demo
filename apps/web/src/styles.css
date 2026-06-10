@@ -638,6 +638,33 @@ a {
   align-items: start;
 }
 
+.warehouse-workbench-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.warehouse-workbench-card .ant-card-body {
+  display: grid;
+  gap: 20px;
+}
+
+.warehouse-section-card {
+  height: 100%;
+}
+
+.warehouse-section-card .ant-card-body {
+  display: grid;
+  gap: 16px;
+}
+
+.warehouse-scan-section {
+  display: grid;
+  gap: 20px;
+}
+
+.warehouse-mini-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .warehouse-inventory-section {
   display: grid;
   gap: 20px;
@@ -734,7 +761,8 @@ a {
   .dashboard-status-grid,
   .dashboard-kpi-grid,
   .dashboard-mini-grid,
-  .dashboard-admin-grid {
+  .dashboard-admin-grid,
+  .warehouse-workbench-grid {
     grid-template-columns: 1fr;
   }
 
@@ -742,6 +770,7 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .warehouse-mini-grid,
   .warehouse-inventory-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

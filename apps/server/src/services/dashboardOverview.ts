@@ -194,6 +194,14 @@ export type DashboardOverview = {
     archiveTone: DashboardTone | null;
   };
   execution: {
+    contractTotalQuantity: number;
+    contractExecutingQuantity: number;
+    contractPendingExecutionQuantity: number;
+    focusBatchQuantity: number;
+    focusBatchInTransitQuantity: number;
+    focusBatchInStockQuantity: number;
+    focusBatchOutboundQuantity: number;
+    inboundScopeQuantity: number;
     totalQuantity: number;
     unit: string;
     inboundCompleted: number;
@@ -625,6 +633,7 @@ export async function getDashboardOverview(options: DashboardOverviewOptions = {
         contractId: true,
         salesNo: true,
         status: true,
+        quantity: true,
         deliveryStatus: true,
         signStatus: true
       }
@@ -823,6 +832,18 @@ export async function getDashboardOverview(options: DashboardOverviewOptions = {
   const selectedContract = contracts.find((item) => item.id === selectedProfile?.contractId) ?? null;
   const selectedContractInventory = selectedContract ? contractInventoryMap.get(selectedContract.id) ?? null : null;
   const selectedContractBatches = selectedContract ? batches.filter((item) => item.contractId === selectedContract.id) : [];
+  const selectedPreReceiveOrder = selectedProfile
+    ? preReceiveOrders.find((item) => item.contractId === selectedProfile.contractId) ?? null
+    : null;
+  const selectedInboundOrder = selectedProfile
+    ? inboundOrders.find((item) => item.contractId === selectedProfile.contractId) ?? null
+    : null;
+  const selectedOutboundOrder = selectedProfile
+    ? outboundOrders.find((item) => item.contractId === selectedProfile.contractId) ?? null
+    : null;
+  const selectedSalesOrder = selectedProfile
+    ? salesOrders.find((item) => item.contractId === selectedProfile.contractId) ?? null
+    : null;
   const focusBatchRecord =
     selectedContractBatches.find((item) => (batchInventoryMap.get(item.id)?.totalQrItems ?? 0) > 0) ??
     selectedContractBatches[0] ??
@@ -833,13 +854,29 @@ export async function getDashboardOverview(options: DashboardOverviewOptions = {
       ? inventory.byWarehouse.find((item) => item.warehouseId === focusBatchInventory.warehouseId) ?? null
       : null;
 
-  const totalQuantity = selectedProfile ? selectedContract?.totalQuantity ?? focusBatchInventory?.batchQuantity ?? 0 : 0;
+  const contractTotalQuantity = selectedProfile
+    ? selectedContract?.totalQuantity ?? selectedProfile?.totalQuantity ?? focusBatchInventory?.batchQuantity ?? 0
+    : 0;
+  const contractExecutingQuantity = selectedProfile
+    ? selectedContractInventory?.totalQrItems ?? focusBatchInventory?.totalQrItems ?? 0
+    : 0;
+  const contractPendingExecutionQuantity = Math.max(contractTotalQuantity - contractExecutingQuantity, 0);
+  const focusBatchQuantity = selectedProfile
+    ? focusBatchInventory?.batchQuantity ?? focusBatchRecord?.totalQuantity ?? 0
+    : 0;
   const unit = selectedContract?.unit ?? selectedProfile?.unit ?? selectedContractInventory?.unit ?? focusBatchInventory?.unit ?? scenario.unit;
   const inboundPending = selectedProfile?.inTransitInventory ?? selectedContractInventory?.inTransitInventory ?? 0;
   const outboundCompleted = selectedProfile?.outboundQuantity ?? selectedContractInventory?.outboundQuantity ?? 0;
+  const inboundScopeQuantity =
+    contractExecutingQuantity > 0 ? contractExecutingQuantity : focusBatchQuantity > 0 ? focusBatchQuantity : contractTotalQuantity;
   const inboundCompleted =
-    selectedProfile && totalQuantity > 0 ? Math.max(totalQuantity - inboundPending, 0) : 0;
-  const outboundTarget = Math.min(scenario.plannedOutboundQuantity, totalQuantity);
+    selectedProfile && inboundScopeQuantity > 0 ? Math.max(contractExecutingQuantity - inboundPending, 0) : 0;
+  const outboundTarget =
+    selectedSalesOrder?.quantity ??
+    Math.min(
+      scenario.plannedOutboundQuantity,
+      contractExecutingQuantity > 0 ? contractExecutingQuantity : contractTotalQuantity
+    );
   const outboundRemaining = Math.max(outboundTarget - outboundCompleted, 0);
 
   const unpaidReceivables = receivables
@@ -952,19 +989,6 @@ export async function getDashboardOverview(options: DashboardOverviewOptions = {
 
   const recentTasks: DashboardTask[] = [];
   const latestDraftDocument = documents.find((item) => !item.businessCreated);
-  const selectedPreReceiveOrder = selectedProfile
-    ? preReceiveOrders.find((item) => item.contractId === selectedProfile.contractId) ?? null
-    : null;
-  const selectedInboundOrder = selectedProfile
-    ? inboundOrders.find((item) => item.contractId === selectedProfile.contractId) ?? null
-    : null;
-  const selectedOutboundOrder = selectedProfile
-    ? outboundOrders.find((item) => item.contractId === selectedProfile.contractId) ?? null
-    : null;
-  const selectedSalesOrder = selectedProfile
-    ? salesOrders.find((item) => item.contractId === selectedProfile.contractId) ?? null
-    : null;
-
   if (latestDraftDocument) {
     recentTasks.push({
       id: `doc-${latestDraftDocument.id}`,
@@ -1152,11 +1176,19 @@ export async function getDashboardOverview(options: DashboardOverviewOptions = {
       archiveTone: selectedProfile?.archiveStatus.tone ?? null
     },
     execution: {
-      totalQuantity,
+      contractTotalQuantity,
+      contractExecutingQuantity,
+      contractPendingExecutionQuantity,
+      focusBatchQuantity,
+      focusBatchInTransitQuantity: focusBatchInventory?.inTransitInventory ?? 0,
+      focusBatchInStockQuantity: focusBatchInventory?.realtimeInventory ?? 0,
+      focusBatchOutboundQuantity: focusBatchInventory?.outboundQuantity ?? 0,
+      inboundScopeQuantity,
+      totalQuantity: contractTotalQuantity,
       unit,
       inboundCompleted,
       inboundPending,
-      inboundProgressPercent: toPercent(inboundCompleted, totalQuantity),
+      inboundProgressPercent: toPercent(inboundCompleted, inboundScopeQuantity),
       outboundTarget,
       outboundCompleted,
       outboundRemaining,

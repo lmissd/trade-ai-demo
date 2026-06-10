@@ -114,6 +114,7 @@ async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: str
                 contractNo: true,
                 customerName: true,
                 supplierName: true,
+                totalQuantity: true,
                 amount: true,
                 currency: true
               }
@@ -131,6 +132,7 @@ async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: str
             contractNo: true,
             customerName: true,
             supplierName: true,
+            totalQuantity: true,
             amount: true,
             currency: true
           }
@@ -151,6 +153,23 @@ async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: str
             contractNo: true,
             customerName: true,
             supplierName: true,
+            totalQuantity: true,
+            amount: true,
+            currency: true
+          }
+        }
+      }
+    })) ??
+    (await prisma.batch.findFirst({
+      orderBy: { createdAt: "desc" },
+      include: {
+        contract: {
+          select: {
+            id: true,
+            contractNo: true,
+            customerName: true,
+            supplierName: true,
+            totalQuantity: true,
             amount: true,
             currency: true
           }
@@ -239,6 +258,10 @@ async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: str
 
   if (!salesOrder) {
     const plannedOutboundQuantity = activeDemoConfig?.plannedOutboundQuantity ?? Math.min(20, resolvedBatch.totalQuantity);
+    const totalContractQuantity = Math.max(resolvedBatch.contract.totalQuantity, 1);
+    const salesAmount = Number(
+      ((resolvedBatch.contract.amount * plannedOutboundQuantity) / totalContractQuantity).toFixed(2)
+    );
 
     salesOrder = await prisma.salesOrder.create({
       data: {
@@ -251,7 +274,7 @@ async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: str
         skuName: resolvedBatch.productName,
         quantity: plannedOutboundQuantity,
         unit: resolvedBatch.unit,
-        amount: resolvedBatch.contract.amount,
+        amount: salesAmount,
         currency: resolvedBatch.contract.currency,
         deliveryMethod: "当地配送",
         deliveryStatus: "READY",
@@ -404,6 +427,283 @@ async function buildWarehouseContext(mode: ScanOperationType, batchId?: string |
   };
 }
 
+function createQrSummaryBucket() {
+  return {
+    total: 0,
+    pendingInbound: 0,
+    inStock: 0,
+    outbound: 0,
+    frozen: 0,
+    damaged: 0,
+    lost: 0
+  };
+}
+
+function collectQrSummaryByBatch(
+  qrItems: Array<{
+    batchId: string | null;
+    status: QrItemStatus;
+  }>
+) {
+  const summaryByBatch = new Map<string, ReturnType<typeof createQrSummaryBucket>>();
+
+  for (const item of qrItems) {
+    if (!item.batchId) {
+      continue;
+    }
+
+    const bucket = summaryByBatch.get(item.batchId) ?? createQrSummaryBucket();
+    bucket.total += 1;
+
+    if (item.status === QrItemStatus.PENDING_INBOUND) {
+      bucket.pendingInbound += 1;
+    } else if (item.status === QrItemStatus.IN_STOCK) {
+      bucket.inStock += 1;
+    } else if (item.status === QrItemStatus.OUTBOUND) {
+      bucket.outbound += 1;
+    } else if (item.status === QrItemStatus.FROZEN) {
+      bucket.frozen += 1;
+    } else if (item.status === QrItemStatus.DAMAGED) {
+      bucket.damaged += 1;
+    } else if (item.status === QrItemStatus.LOST) {
+      bucket.lost += 1;
+    }
+
+    summaryByBatch.set(item.batchId, bucket);
+  }
+
+  return summaryByBatch;
+}
+
+async function buildWarehouseWorkbench(batchId?: string | null) {
+  const inboundFocus = await ensureWarehouseTaskContext("INBOUND", batchId);
+  const outboundFocus = await ensureWarehouseTaskContext("OUTBOUND", inboundFocus.batch.id);
+
+  const [preReceiveOrders, inboundOrders, outboundOrders, salesOrders, batches, contracts, warehouses, locations] =
+    await Promise.all([
+      prisma.preReceiveOrder.findMany({
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+      }),
+      prisma.inboundOrder.findMany({
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+      }),
+      prisma.outboundOrder.findMany({
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+      }),
+      prisma.salesOrder.findMany({
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+      }),
+      prisma.batch.findMany({
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+      }),
+      prisma.contract.findMany({
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+      }),
+      prisma.warehouse.findMany({
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+      }),
+      prisma.warehouseLocation.findMany({
+        orderBy: [{ warehouseId: "asc" }, { zone: "asc" }, { locationCode: "asc" }]
+      })
+    ]);
+
+  const batchIdSet = new Set<string>();
+
+  for (const order of preReceiveOrders) {
+    if (order.batchId) {
+      batchIdSet.add(order.batchId);
+    }
+  }
+
+  for (const order of outboundOrders) {
+    if (order.batchId) {
+      batchIdSet.add(order.batchId);
+    }
+  }
+
+  const qrItems =
+    batchIdSet.size > 0
+      ? await prisma.qrItem.findMany({
+          where: {
+            batchId: {
+              in: Array.from(batchIdSet)
+            }
+          },
+          select: {
+            batchId: true,
+            status: true
+          }
+        })
+      : [];
+
+  const qrSummaryByBatch = collectQrSummaryByBatch(qrItems);
+  const inboundOrderByBatchWarehouse = new Map<string, (typeof inboundOrders)[number]>();
+  const salesOrderById = new Map<string, (typeof salesOrders)[number]>();
+  const batchById = new Map<string, (typeof batches)[number]>();
+  const contractById = new Map<string, (typeof contracts)[number]>();
+  const warehouseById = new Map<string, (typeof warehouses)[number]>();
+
+  for (const item of inboundOrders) {
+    const key = `${item.batchId ?? ""}:${item.warehouseId ?? ""}`;
+    if (!inboundOrderByBatchWarehouse.has(key)) {
+      inboundOrderByBatchWarehouse.set(key, item);
+    }
+  }
+
+  for (const item of salesOrders) {
+    salesOrderById.set(item.id, item);
+  }
+
+  for (const item of batches) {
+    batchById.set(item.id, item);
+  }
+
+  for (const item of contracts) {
+    contractById.set(item.id, item);
+  }
+
+  for (const item of warehouses) {
+    warehouseById.set(item.id, item);
+  }
+
+  const preReceiveRows = preReceiveOrders.map((order) => {
+    const batch = order.batchId ? batchById.get(order.batchId) ?? null : null;
+    const contract = order.contractId ? contractById.get(order.contractId) ?? null : null;
+    const warehouse = order.warehouseId ? warehouseById.get(order.warehouseId) ?? null : null;
+    const relatedInboundOrder =
+      inboundOrderByBatchWarehouse.get(`${order.batchId ?? ""}:${order.warehouseId ?? ""}`) ?? null;
+    const qrSummary = order.batchId ? qrSummaryByBatch.get(order.batchId) ?? createQrSummaryBucket() : createQrSummaryBucket();
+    const scannedQuantity = Math.min(qrSummary.inStock + qrSummary.outbound, order.quantity);
+
+    return {
+      id: order.id,
+      preReceiveNo: order.preReceiveNo,
+      expectedArrivalTime: order.expectedArrivalTime,
+      skuName: order.skuName,
+      quantity: order.quantity,
+      unit: order.unit,
+      suggestedLocation: order.suggestedLocation,
+      status: order.status,
+      batchId: order.batchId,
+      batchNo: batch?.batchNo ?? "-",
+      batchStatus: batch?.status ?? null,
+      contractId: order.contractId,
+      contractNo: contract?.contractNo ?? "-",
+      warehouseId: order.warehouseId,
+      warehouseName: warehouse?.name ?? "-",
+      inboundNo: relatedInboundOrder?.inboundNo ?? "-",
+      scannedQuantity,
+      remainingQuantity: Math.max(order.quantity - scannedQuantity, 0),
+      qrSummary,
+      updatedAt: order.updatedAt
+    };
+  });
+
+  const outboundRows = outboundOrders.map((order) => {
+    const batch = order.batchId ? batchById.get(order.batchId) ?? null : null;
+    const contract = order.contractId ? contractById.get(order.contractId) ?? null : null;
+    const warehouse = order.warehouseId ? warehouseById.get(order.warehouseId) ?? null : null;
+    const salesOrder = order.salesOrderId ? salesOrderById.get(order.salesOrderId) ?? null : null;
+    const qrSummary = order.batchId ? qrSummaryByBatch.get(order.batchId) ?? createQrSummaryBucket() : createQrSummaryBucket();
+    const scannedQuantity = Math.min(qrSummary.outbound, order.quantity);
+
+    return {
+      id: order.id,
+      outboundNo: order.outboundNo,
+      status: order.status,
+      quantity: order.quantity,
+      unit: order.unit,
+      batchId: order.batchId,
+      batchNo: batch?.batchNo ?? "-",
+      batchStatus: batch?.status ?? null,
+      contractId: order.contractId,
+      contractNo: contract?.contractNo ?? "-",
+      warehouseId: order.warehouseId,
+      warehouseName: warehouse?.name ?? "-",
+      salesOrderId: order.salesOrderId,
+      salesNo: salesOrder?.salesNo ?? "-",
+      customerName: salesOrder?.customerName ?? contract?.customerName ?? "-",
+      skuName: salesOrder?.skuName ?? batch?.productName ?? "-",
+      deliveryMethod: salesOrder?.deliveryMethod ?? null,
+      deliveryStatus: salesOrder?.deliveryStatus ?? null,
+      signStatus: salesOrder?.signStatus ?? null,
+      scannedQuantity,
+      remainingQuantity: Math.max(order.quantity - scannedQuantity, 0),
+      inStockAvailable: qrSummary.inStock,
+      qrSummary,
+      updatedAt: order.updatedAt
+    };
+  });
+
+  const allQrSummary = qrItems.reduce(
+    (accumulator, item) => {
+      accumulator.total += 1;
+
+      if (item.status === QrItemStatus.PENDING_INBOUND) {
+        accumulator.pendingInbound += 1;
+      } else if (item.status === QrItemStatus.IN_STOCK) {
+        accumulator.inStock += 1;
+      } else if (item.status === QrItemStatus.OUTBOUND) {
+        accumulator.outbound += 1;
+      } else if (item.status === QrItemStatus.FROZEN) {
+        accumulator.frozen += 1;
+      }
+
+      return accumulator;
+    },
+    {
+      total: 0,
+      pendingInbound: 0,
+      inStock: 0,
+      outbound: 0,
+      frozen: 0
+    }
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    focus: {
+      batchId: inboundFocus.batch.id,
+      batchNo: inboundFocus.batch.batchNo,
+      contractId: inboundFocus.contract.id,
+      contractNo: inboundFocus.contract.contractNo,
+      warehouseId: inboundFocus.warehouse.id,
+      warehouseName: inboundFocus.warehouse.name
+    },
+    summary: {
+      preReceiveTotal: preReceiveRows.length,
+      preReceiveReady: preReceiveRows.filter((item) => item.status === "READY" || item.status === "PENDING").length,
+      preReceiveInProgress: preReceiveRows.filter((item) => item.status === "IN_PROGRESS").length,
+      preReceiveCompleted: preReceiveRows.filter((item) => item.status === "COMPLETED").length,
+      outboundTotal: outboundRows.length,
+      outboundReady: outboundRows.filter((item) => item.status === "READY" || item.status === "PENDING").length,
+      outboundInProgress: outboundRows.filter((item) => item.status === "IN_PROGRESS").length,
+      outboundCompleted: outboundRows.filter((item) => item.status === "COMPLETED").length,
+      pendingInboundQrCount: allQrSummary.pendingInbound,
+      inStockQrCount: allQrSummary.inStock,
+      outboundQrCount: allQrSummary.outbound,
+      frozenQrCount: allQrSummary.frozen,
+      warehouseCount: new Set(
+        [...preReceiveRows.map((item) => item.warehouseId), ...outboundRows.map((item) => item.warehouseId)].filter(Boolean)
+      ).size
+    },
+    preReceiveOrders: preReceiveRows,
+    outboundOrders: outboundRows,
+    locationSnapshots: locations.map((location) => ({
+      id: location.id,
+      warehouseId: location.warehouseId,
+      warehouseName:
+        (location.warehouseId ? warehouseById.get(location.warehouseId)?.name : null) ?? "未绑定仓库",
+      locationCode: location.locationCode,
+      zone: location.zone,
+      status: location.status,
+      isFocusWarehouse: location.warehouseId === inboundFocus.warehouse.id,
+      isSuggestedForInbound: location.id === inboundFocus.suggestedLocation?.id,
+      isSuggestedForOutbound: location.id === outboundFocus.suggestedLocation?.id
+    }))
+  };
+}
+
 async function createWarehouseMutation(
   mode: ScanOperationType,
   qrCode: string,
@@ -533,6 +833,15 @@ warehouseRouter.post("/scan/context", async (request, response) => {
     response.json(context);
   } catch (error) {
     response.status(400).json({ message: toErrorMessage(error, "加载仓储任务上下文失败。") });
+  }
+});
+
+warehouseRouter.get("/workbench", async (request, response) => {
+  try {
+    const workbench = await buildWarehouseWorkbench(normalizeText(request.query.batchId));
+    response.json(workbench);
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "加载仓储工作台失败。") });
   }
 });
 

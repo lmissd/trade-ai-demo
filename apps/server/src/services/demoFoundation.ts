@@ -84,7 +84,7 @@ const roleSeeds = [
   }
 ] as const;
 
-const standardScenarioIdentifiers = {
+export const standardScenarioIdentifiers = {
   contractNo: "CTR-DEMO-202606-001",
   batchNo: "BAT-DEMO-202606-001",
   purchaseNo: "PO-DEMO-202606-001",

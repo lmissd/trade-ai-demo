@@ -27,6 +27,10 @@
 - 完成后先等用户验证，不立即提交 Git
 - 只有用户确认满意后，才执行 `git add`、`git commit`、`git push`
 - AI 不能直接写数据库业务结果，所有业务写入都必须经过后端接口和用户确认
+- 标准演示素材中的 `演示合同-中国采购100箱` 与 `演示箱单-赞比亚仓库100箱`，AI Mock 识别后必须默认落到同一票业务：
+  - `contractNoDraft = CTR-DEMO-202606-001`
+  - `batchNoDraft = BAT-DEMO-202606-001`
+  - 不能再因为 mock 后缀不同而要求用户手动对齐
 
 ## 长期升级地基记忆
 
@@ -121,6 +125,12 @@
 - 阶段 11：已完成，已随阶段 9 / 阶段 10 本地提交，但尚未 push
   - 本地 Commit: `b6ddc28`
   - Message: `feat: 完成阶段9-11 AI助手、驾驶舱与采购集货模块`
+- 阶段 12：已完成，可继续保留当前变更一并等待你最终验收后再决定是否提交 Git
+- 阶段 13：已完成，本地待你验证后再决定是否提交 Git
+- 阶段 14：已完成，本地待你验证后再决定是否提交 Git
+- 阶段 15：已完成，本地待你验证后再决定是否提交 Git
+- 阶段 16：已完成，本地待你验证后再决定是否提交 Git
+- 阶段 17：已完成，本地待你验证后再决定是否提交 Git
 - 当前插入式维护：已完成“首页驾驶舱 / 合同与单据页一键重置到空白演示起点”能力，当前仍未提交 Git
 
 ## 当前数据库状态
@@ -150,7 +160,7 @@
 
 当前最新数据库关键计数为：
 
-- `documents = 4`
+- `documents = 6`
 - `contracts = 1`
 - `contractItems = 1`
 - `batches = 1`
@@ -158,31 +168,32 @@
 - `purchaseOrderItems = 1`
 - `shipments = 1`
 - `shipmentNodes = 6`
+- `customsClearances = 1`
 - `payments = 1`
 - `receivables = 1`
-- `qrItems = 100`
-- `stockMovements = 120`
+- `qrItems = 0`
+- `stockMovements = 0`
 - `preReceiveOrders = 1`
 - `inboundOrders = 1`
 - `outboundOrders = 1`
 - `salesOrders = 1`
-- `workOrders = 5`
+- `workOrders = 2`
 - `inventorySnapshots = 0`
-- `aiLogs = 5`
-- `auditLogs = 0`
+- `aiLogs = 8`
+- `auditLogs = 10`
 - `demoConfigs = 1`
 
 当前最新真实库存汇总为：
 
-- `totalQrItems = 100`
+- `totalQrItems = 0`
 - `inTransitInventory = 0`
-- `realtimeInventory = 80`
-- `availableInventory = 80`
+- `realtimeInventory = 0`
+- `availableInventory = 0`
 - `frozenInventory = 0`
-- `outboundQuantity = 20`
-- `totalInboundMovements = 100`
-- `totalOutboundMovements = 20`
-- `statusAccountedQuantity = 100`
+- `outboundQuantity = 0`
+- `totalInboundMovements = 0`
+- `totalOutboundMovements = 0`
+- `statusAccountedQuantity = 0`
 - `isConsistent = true`
 
 这说明当前系统已经进入：
@@ -196,9 +207,38 @@
 - AI 真实库存问答层：已完成第一版
 - 首页驾驶舱总览层：已完成第一版
 - 采购与集货展示层：已完成第一版
+- 仓储管理增强工作台：已完成第一版
 - 当前演示数据库状态说明：
   - 当前页面或本地旧记录里如果还出现“恢复为标准演示业务链路”的旧说法，属于历史记忆残留
-  - 当前应以“重置后回到空白演示起点，再由用户手动上传 `pics` 素材开始”作为最终规则
+- 当前应以“重置后回到空白演示起点，再由用户手动上传 `pics` 素材开始”作为最终规则
+
+## 最近一次单据自动配对与驾驶舱口径补充
+
+- 已修复一个真实演示阻塞问题：
+  - 标准演示合同与标准演示箱单虽然都已识别，但此前 mock 识别会分别生成不同的 `contractNoDraft / batchNoDraft`
+  - 这会导致系统把两份标准素材误判为两票不同业务，从而无法点击“确认生成业务数据”
+- 当前最新规则是：
+  - 对标准演示图片 `演示合同-中国采购100箱.png`
+  - 以及 `演示箱单-赞比亚仓库100箱.png`
+  - AI Mock 识别后默认自动配成同一票业务
+  - 不再要求用户手动修改草稿号
+- 本次已真实自测：
+  - 重新识别后，合同与箱单都会落到
+    - `CTR-DEMO-202606-001`
+    - `BAT-DEMO-202606-001`
+
+- 已补充首页驾驶舱字段口径，避免把“合同总量”和“库存数量”混为一谈
+- 当前驾驶舱应按以下口径理解：
+  - `合同总量` = 商务承诺总数量
+  - `已进入执行` = 已生成二维码、已进入实际执行链路的数量
+  - `合同待执行` = 合同总量减去已进入执行数量
+  - `当前执行批次量` = 当前主批次的总数量
+  - `当前批次在途` = 当前主批次已生成二维码但尚未入库的真实数量
+  - `当前批次在库` = 当前主批次已扫码入库且尚未出库的真实数量
+  - `当前批次已出库` = 当前主批次已扫码出库的真实数量
+- 这意味着：
+  - 驾驶舱不再只显示一个“100箱”或“40箱”
+  - 而是同时区分合同总量、执行量和真实库存量
 
 ## 阶段 3 已完成内容
 
@@ -984,6 +1024,23 @@
   - 创建 `ShipmentNode`
   - 创建 `WorkOrder`
   - 让采购模块把业务上下文正式交给国际物流阶段
+- 关于 `Shipment` 的成熟版原则补充：
+  - `Shipment` 应被视为系统内部正式运输业务单，不等于外部 `提单`
+  - 成熟版应保持“采购 / 集货完成后自动创建 `Shipment`”这个方向
+  - 但自动创建时，优先只生成内部运输单号，例如 `SHP-...`
+  - `提单号 / 柜号 / 船公司 / 航次 / ETD / ETA` 等运输资料，成熟版允许先为空
+  - 这些资料应在后续国际物流阶段通过两类方式补全：
+    - 上传提单等运输单据后，由 AI 识别并经人工确认回填
+    - 物流人员在系统中手工录入或修正
+  - 在资料未补全前，`Shipment` 的成熟版状态应更偏向：
+    - `待补运输资料`
+    - `待订舱`
+    - `待录入提单`
+  - 当前阶段 12 为了先跑通 Demo，暂时使用了自动补出演示提单号与柜号的做法
+  - 后续如果升级到更成熟版本，应改为：
+    - `Shipment` 自动建单
+    - `提单 / 柜号` 后续补全
+    - 页面上清楚区分“系统内部运输单”与“外部提单单据”
 
 阶段 11 当前真实演示数据基线：
 
@@ -1011,6 +1068,245 @@
   - 最新物流记录
   - 最新工单信息
   - 最新推进历史
+
+## 阶段 12 已完成内容
+
+阶段 12 已经实现：
+
+- 新增国际物流后端接口：
+  - `GET /api/logistics/shipments`
+  - `GET /api/logistics/shipments/:id`
+  - `POST /api/logistics/shipments/:id/progress`
+- 新增前端正式页面：
+  - 左侧菜单 `国际物流`
+  - 路由 `http://127.0.0.1:5173/logistics`
+- 页面已从骨架页升级为真实演示工作台，支持：
+  - 运输批次列表
+  - 运输详情抽屉
+  - 运输节点时间轴
+  - 关联合同 / 批次 / 采购单 / 柜号 / 提单 / 起运港 / 目的港展示
+  - 关联二维码状态概况展示
+  - 关联系统单据展示
+  - 关联物流工单与清关工单展示
+  - 物流状态推进历史展示
+- 当前国际物流状态按演示版顺序推进：
+  - `COLLECTION_COMPLETED`
+  - `DEPARTED`
+  - `ARRIVED_DESTINATION`
+- 页面交互已限制为只能顺序推进，不允许跳步或回退
+- 阶段 12 严格保持：
+  - 国际物流状态推进不会直接改库存
+  - 不会直接改 `QrItem.status`
+  - 不会直接改 `StockMovement`
+  - 库存仍然只能由二维码扫码入库 / 扫码出库驱动
+- 当国际物流推进到 `ARRIVED_DESTINATION` 时，系统会自动联动：
+  - 创建或更新 `CustomsClearance`
+  - 创建 `CUSTOMS_CLEARANCE` 工单
+  - 生成 AI 单据一致性检查草稿结果
+  - 让国际物流模块把业务上下文正式交给报关清关阶段
+
+阶段 12 当前真实演示数据基线：
+
+- 采购单 `PO-DEMO-202606-001`
+  - 当前已推进到 `COLLECTION_COMPLETED`
+- 运输批次 `SHP-DEMO-202606-001`
+  - 当前已推进到 `ARRIVED_DESTINATION`
+  - 当前页面状态文案为 `到港待清关`
+  - 当前已生成运输节点：
+    - `国内集货完成`
+    - `已装柜`
+    - `已离港`
+    - `海运中`
+    - `到达目的港`
+    - `待清关`
+- 清关草稿 `CUS-DEMO-202606-001`
+  - 当前状态为 `PENDING`
+  - 当前已挂接箱单单据
+- 自动工单：
+  - `WO-LOG-DEMO-202606-001`
+    - 类型：`LOGISTICS_ARRANGEMENT`
+    - 当前状态：`COMPLETED`
+  - `WO-CUS-DEMO-202606-001`
+    - 类型：`CUSTOMS_CLEARANCE`
+    - 当前状态：`PENDING`
+
+阶段 12 自测结果：
+
+- `npx tsc -p apps/server/tsconfig.json --noEmit`：通过
+- `npx tsc -p apps/web/tsconfig.json --noEmit`：通过
+- `npm run build --workspace @trade-ai-demo/web`：通过
+- 已验证 `GET /api/logistics/shipments`
+- 已验证 `GET /api/logistics/shipments/:id`
+- 已验证 `POST /api/logistics/shipments/:id/progress`
+  - 已验证 `COLLECTION_COMPLETED -> DEPARTED`
+  - 已验证 `DEPARTED -> ARRIVED_DESTINATION`
+  - 已验证到港后自动生成 `CustomsClearance / CUSTOMS_CLEARANCE WorkOrder`
+- 已确认国际物流详情抽屉可回读：
+  - 最新运输状态
+  - 完整时间轴
+  - 关联合同 / 批次 / 采购单
+  - 关联单据
+  - 关联清关草稿
+  - 关联物流 / 清关工单
+  - 最新推进历史
+
+## 阶段 13 已完成内容
+
+阶段 13 已经实现：
+
+- 新增报关清关后端接口：
+  - `GET /api/customs/clearances`
+  - `GET /api/customs/clearances/:id`
+  - `POST /api/customs/clearances/:id/complete`
+- 新增前端正式页面：
+  - 左侧菜单 `报关清关`
+  - 路由 `http://127.0.0.1:5173/customs`
+- 页面已从骨架页升级为真实演示工作台，支持：
+  - 清关记录列表
+  - 清关详情抽屉
+  - 责任公司 / 责任人展示
+  - 关联合同 / 批次 / 运输批次展示
+  - 箱单 / 发票 / 提单 / 产地证关联系统单据展示
+  - AI 单据一致性检查结果展示
+  - 清关状态推进历史展示
+  - 关联清关工单、境外陆运任务、仓库预收货单与预收货工单展示
+- 当前报关清关状态按演示版顺序推进：
+  - `PENDING`
+  - `COMPLETED`
+- 页面交互已限制为只能从 `待清关` 顺序推进到 `已完成清关`，不允许跳步或回退
+- 阶段 13 严格保持：
+  - 清关推进不会直接改库存
+  - 不会直接改 `QrItem.status`
+  - 不会直接改 `StockMovement`
+  - 库存仍然只能由二维码扫码入库 / 扫码出库驱动
+- 当清关推进到 `COMPLETED` 时，系统会自动联动：
+  - 创建 `PreReceiveOrder`
+  - 创建 `OVERSEAS_LAND_TRANSPORT` 工单
+  - 创建 `WAREHOUSE_PRE_RECEIVE` 工单
+  - 完成已有 `CUSTOMS_CLEARANCE` 工单
+  - 让报关清关模块把业务上下文正式交给仓储管理阶段
+
+阶段 13 当前真实演示数据基线：
+
+- 清关草稿 `CUS-DEMO-202606-001`
+  - 当前状态已恢复为 `PENDING`
+  - 当前页面状态文案为 `待清关`
+  - 当前已挂接箱单单据
+  - 当前 AI 一致性检查结果为：
+    - `箱单数量 = 100箱`
+    - `发票数量 = 100箱`
+    - `提单柜号 = CONT-DEMO-202606-001`
+    - `AI 判断 = 单据数量一致，可进入清关流程`
+- 自动工单：
+  - `WO-CUS-DEMO-202606-001`
+    - 类型：`CUSTOMS_CLEARANCE`
+    - 当前状态：`PENDING`
+- 当前为了方便你手动验阶段 13，我已把联动自测后产生的预收货与陆运任务恢复回未生成状态：
+  - `preReceiveOrders = 0`
+  - `workOrders = 2`
+  - 页面上仍然保留“模拟清关完成”按钮，供你现场亲自推进
+
+阶段 13 自测结果：
+
+- `npx tsc -p apps/server/tsconfig.json --noEmit`：通过
+- `npx tsc -p apps/web/tsconfig.json --noEmit`：通过
+- `npm run build --workspace @trade-ai-demo/web`：通过
+- 已验证 `GET /api/customs/clearances`
+- 已验证 `GET /api/customs/clearances/:id`
+- 已验证 `POST /api/customs/clearances/:id/complete`
+  - 已验证 `PENDING -> COMPLETED`
+  - 已验证自动生成：
+    - `PR-DEMO-202606-001`
+    - `WO-LAND-DEMO-202606-001`
+    - `WO-WH-DEMO-202606-001`
+  - 已验证清关完成后库存汇总保持不变：
+    - `totalQrItems = 0`
+    - `realtimeInventory = 0`
+    - `stockMovements = 0`
+- 已确认报关清关详情抽屉可回读：
+  - 最新清关状态
+  - AI 一致性检查结果
+  - 关联合同 / 批次 / 运输批次
+  - 关联系统单据
+  - 关联清关 / 陆运 / 预收货工单
+  - 最新推进历史
+- 已在自测结束后把清关状态恢复回 `PENDING`，避免影响你手动验收阶段 13
+
+## 阶段 14 已完成内容
+
+阶段 14 已经实现：
+
+- 新增仓储工作台后端接口：
+  - `GET /api/warehouse/workbench`
+- 仓储页面 `http://127.0.0.1:5173/warehouse` 已从单一扫码控制台升级为四分区工作台：
+  - `预收货管理`
+  - `扫码收货验收`
+  - `库存管理`
+  - `销售出库管理`
+- 阶段 14 严格复用了阶段 6 / 7 / 8 的真实能力，而不是新造一套假仓储流程：
+  - 入库仍然通过真实 `POST /api/warehouse/scan/preview`
+  - 入库仍然通过真实 `POST /api/warehouse/scan/confirm`
+  - 出库仍然通过真实 `POST /api/warehouse/scan/preview`
+  - 出库仍然通过真实 `POST /api/warehouse/scan/confirm`
+  - 库存统计仍然来自真实 `GET /api/inventory/summary`
+- 当前仓储工作台新增的成熟 ERP 视角包括：
+  - 预收货任务列表 + 详情区
+  - 销售出库任务列表 + 详情区
+  - 聚焦仓库库位快照
+  - 入库 / 出库扫码上下文分区展示
+  - 统一的仓储顶部 KPI 卡片
+- 当前页面已补充一个重要演示提示：
+  - 如果当前批次还没有生成二维码，仓储页会明确提示“可以先看任务，但暂时不能真实扫码”
+  - 避免把“应扫数量存在，但二维码仍为 0”误判成页面故障
+
+阶段 14 当前真实演示数据基线：
+
+- 预收货单：
+  - `PR-BAT-DEMO-202606-001`
+  - 当前状态：`READY`
+- 入库单：
+  - `IN-BAT-DEMO-202606-001`
+  - 当前状态：`READY`
+- 销售单：
+  - `SO-BAT-DEMO-202606-001`
+  - 当前状态：`READY`
+- 出库单：
+  - `OUT-BAT-DEMO-202606-001`
+  - 当前状态：`READY`
+- 当前仍未生成二维码：
+  - `qrItems = 0`
+  - `stockMovements = 0`
+  - `realtimeInventory = 0`
+- 这符合当前演示链路：
+  - 合同、批次、采购、物流、清关、预收货、出库任务已经建立
+  - 但只要二维码还没生成、也还没扫码入库，库存就必须保持为 0
+
+阶段 14 自测结果：
+
+- `npx tsc -p apps/server/tsconfig.json --noEmit`：通过
+- `npx tsc -p apps/web/tsconfig.json --noEmit`：通过
+- `npm run build --workspace @trade-ai-demo/web`：通过
+- 已验证 `GET /api/warehouse/workbench`
+- 已验证 `POST /api/warehouse/scan/context`
+- 已验证 `GET /api/inventory/summary`
+- 已验证仓储页可见 DOM 已包含：
+  - `预收货管理`
+  - `扫码收货验收`
+  - `库存管理`
+  - `销售出库管理`
+  - `进入扫码收货验收`
+- 当前由于演示基线尚未生成二维码，仓储页扫码区展示为：
+  - 任务与数量上下文可读
+  - 真正扫码执行能力待阶段 5 已生成二维码的数据基线进入后再继续真实操作
+
+关于工单阶段的当前记忆：
+
+- 当前项目里已经开始在采购、物流、清关等环节自动生成必要工单
+- 但这些工单目前只是各业务阶段为了联动演示而产生的真实任务记录
+- “自动工单”作为统一工作台、统一筛选页、统一字段展示页，仍然保留到 `阶段 19：自动工单展示模块` 再集中做深
+- 所以后续如果再次讨论工单，应区分：
+  - 前序业务阶段里的“联动生成工单”
+  - 阶段 19 的“统一工单模块”
 
 ## 最近一次二维码入口优化
 
@@ -1122,15 +1418,15 @@
 - 长期 ERP 升级地基已经记录进项目记忆
 - 未来“独立手机静态扫码端”也已经记录为升级方向
 - 但当前工作仍然回到 Demo 主线，不切去做长期部署改造
-- 当前应先等待用户验证阶段 11，再决定是否提交当前未提交的 Git 变更
+- 当前应先等待用户验证阶段 13，再决定是否提交当前未提交的 Git 变更
 
 ## 下一步应该做什么
 
 - 当前先等待你验证：
-  - `首页驾驶舱 / 合同与单据：一键恢复标准演示业务链路`
+  - `报关清关`
 - 你确认满意后：
-  - 再决定是否提交这次重置能力相关 Git 变更
-  - 然后回到 `阶段 12：国际物流展示模块`
+  - 再决定是否提交当前阶段相关 Git 变更
+  - 然后进入 `阶段 14：仓储管理增强页面`
 
 阶段 6 必须继续保持：
 
@@ -1153,3 +1449,228 @@
 - 库存统计严格基于 `QrItem.status` 与 `StockMovement`
 - 不能把合同数量直接当库存数量
 - 不能把批次数量直接当库存数量
+
+## 最近一次口径补充：报关清关任务单
+
+- 现有报关清关设计里已经有系统自动生成的“清关/报关任务单”能力，但要始终区分两层：
+  - `CustomsClearance.clearanceNo`，例如 `CUS-DEMO-202606-001`，这是清关业务记录 / 清关单
+  - `WorkOrder(type = CUSTOMS_CLEARANCE)`，例如 `WO-CUS-DEMO-202606-001`，这是给人执行的清关工单
+- 因此当前 `/customs` 页面底部列表里看到的 `CUS-...`，应理解为“清关记录号 / 清关单号”，不是 `WO-...` 工单号
+- 后续如果再优化页面文案或字段标题，必须保持这条口径，避免把“清关记录”和“清关工单”混为一谈
+
+## 阶段 15 已完成内容
+
+- 阶段 15 已从占位页升级为真实的“销售与配送”工作台：
+  - 前端页面：`http://127.0.0.1:5173/sales`
+  - 后端接口：
+    - `GET /api/sales/orders`
+    - `GET /api/sales/orders/:id`
+    - `POST /api/sales/orders/:id/complete-delivery`
+- 当前销售页已经支持：
+  - 销售单列表
+  - 销售单详情抽屉
+  - 配送状态展示
+  - 签收状态展示
+  - 关联合同号 / 批次号 / 出库单 / 配送单展示
+  - “模拟配送完成”按钮
+  - 配送完成后联动财务待回款状态
+- 当前阶段 15 的核心联动规则已经锁定：
+  - 配送完成不会改库存
+  - 配送完成不会改 `QrItem.status`
+  - 库存仍然只认二维码扫码出库的真实结果
+  - 配送完成后会把 `SalesOrder` 推进到：
+    - `deliveryStatus = DELIVERED`
+    - `signStatus = SIGNED`
+    - `status = DELIVERED`
+  - 如果当前还没有 `DeliveryOrder`，第一次模拟配送完成时会自动补齐一张配送单
+  - 财务联动时优先复用已有应收，避免重复造账：
+    - 如果已存在合同级 `Receivable` 草稿，则把它推进到待回款状态，不重复创建第二笔
+    - 如果不存在任何可复用 `Receivable`，才新建销售级应收
+  - 配送完成后会自动生成或刷新 `RECEIVABLE_FOLLOW_UP` 财务回款跟进工单
+- 当前销售页会明确显示应收口径：
+  - `销售单级应收`
+  - 或 `合同级应收草稿`
+- 这样做的原因必须记住：
+  - 阶段 4 已经允许在“确认生成业务数据”时先生成应收草稿
+  - 阶段 15 不能再无条件重复生成第二笔应收
+  - 所以当前 Demo 先采用“优先复用已有应收草稿，再推进到待回款”的保守策略
+
+## 阶段 15 自测结果
+
+- 已通过：
+  - `npx tsc -p apps/server/tsconfig.json --noEmit`
+  - `npx tsc -p apps/web/tsconfig.json --noEmit`
+  - `npm run build --workspace @trade-ai-demo/web`
+- 已尝试：
+  - `npm run build --workspace @trade-ai-demo/server`
+  - 结果：未完成
+  - 原因：当前本地正在运行的 server / Prisma Client 占用了 `query_engine-windows.dll.node`，导致 `prisma generate` 在 Windows 下触发 `EPERM rename`
+  - 结论：后端源码级类型检查已经通过，当前阻塞的是本机运行时文件占用，不是阶段 15 代码本身的 TypeScript 错误
+- 已真实验证接口：
+  - `GET /api/sales/orders`
+  - `GET /api/sales/orders/:id`
+  - `POST /api/sales/orders/:id/complete-delivery`
+- 已验证当前手动演示数据口径：
+  - 当前有 1 张销售单
+  - 当前销售单号为 `SO-BAT-DEMO-202606-001`
+  - 当前状态保持为：
+    - `deliveryStatus = READY`
+    - `signStatus = UNSIGNED`
+    - `status = READY`
+  - 当前应收仍显示为合同级草稿：
+    - `scopeLabel = 合同级应收草稿`
+    - `status = UNPAID`
+- 已做一次受控的“模拟配送完成”真自测，并已在自测后恢复现场：
+  - 自测期间成功联动生成：
+    - `DeliveryOrder`
+    - 财务跟进工单
+    - `Receivable.status = PENDING_COLLECTION`
+  - 自测完成后已恢复：
+    - 销售单状态回到 `READY / UNSIGNED / READY`
+    - 删除自测产生的配送单
+    - 删除自测产生的财务工单
+    - 删除自测产生的阶段 15 审计日志
+    - 恢复应收状态为 `UNPAID`
+- 这意味着：
+  - 阶段 15 的功能链路已经被真实打通
+  - 但我没有把自测结果残留在你当前的演示数据里
+
+## 阶段 16 已完成内容
+
+- 阶段 16 已从占位页升级为真实的“财务回款”工作台：
+  - 前端页面：`http://127.0.0.1:5173/finance`
+  - 后端接口：
+    - `GET /api/finance/receivables`
+    - `GET /api/finance/receivables/:id`
+    - `POST /api/finance/receivables/:id/collect-partial`
+    - `POST /api/finance/receivables/:id/collect-full`
+- 当前财务页已经支持：
+  - 回款 KPI 卡片
+  - 应收列表
+  - 账期 / 逾期状态展示
+  - 核销状态展示
+  - 详情抽屉
+  - 关联合同 / 销售单 / 批次 / Payment / 财务工单联动展示
+  - “模拟部分回款”按钮
+  - “模拟全部回款”按钮
+- 当前阶段 16 的核心联动规则已经锁定：
+  - 财务回款模块优先复用现有 `Receivable`、`Payment`、`Contract`、`WorkOrder`
+  - 不额外发明平行账款模型，避免 Demo 前后口径分裂
+  - 部分回款后会同步更新：
+    - `Receivable.receivedAmount`
+    - `Receivable.status`
+    - `Payment.receivedAmount`
+    - `Payment.status`
+    - `Contract.paymentStatus`
+    - 关联财务工单 `status / priority`
+  - 全部回款后会继续同步：
+    - `Payment.receivedAt / paidAt`
+    - `Receivable.reconciliationMeta = 可核销`
+    - 财务工单推进为 `COMPLETED`
+  - 所有回款动作都会写入 `AuditLog`
+  - 财务回款不会反向改库存
+  - 财务回款不会改 `QrItem.status`
+  - 库存口径仍然只认二维码状态与 `StockMovement`
+- 当前 Demo 财务口径必须记住：
+  - 回款状态是“合同 / 销售执行后的资金结果”
+  - 不是“扫码出库一发生就自动视为已回款”
+  - 也不是“合同一创建就自动视为已收款”
+
+## 阶段 16 自测结果
+
+- 已通过：
+  - `npx tsc -p apps/server/tsconfig.json --noEmit`
+  - `npx tsc -p apps/web/tsconfig.json --noEmit`
+  - `npm run build --workspace @trade-ai-demo/web`
+- 已真实验证接口：
+  - `GET /api/finance/receivables`
+  - `GET /api/finance/receivables/:id`
+  - `POST /api/finance/receivables/:id/collect-partial`
+  - `POST /api/finance/receivables/:id/collect-full`
+- 已做过一次受控真自测，并已在自测后恢复现场：
+  - 对演示应收 `cmq66xcww000lurigt46my9q9` 成功执行“部分回款 -> 全部回款”
+  - 已验证 `Receivable / Payment / Contract / WorkOrder / AuditLog` 联动更新正确
+  - 自测结束后已恢复到基线状态，并清理自测产生的财务审计日志
+  - 恢复后为保证运行中的接口读到最新 SQLite 状态，已重启一次本地后端服务
+- 当前恢复后的基线口径为：
+  - `pendingCount = 1`
+  - `partialCount = 0`
+  - `paidCount = 0`
+  - `openAmount = 50000 USD`
+  - `receivedAmount = 0 USD`
+  - `Receivable.status = PENDING_COLLECTION`
+  - `Payment.status = UNPAID`
+  - `Contract.paymentStatus = UNPAID`
+  - 财务工单 `status = PENDING`
+
+## 阶段 17 已完成内容
+
+- 阶段 17 已从骨架页升级为真实的“成本利润”工作台：
+  - 前端页面：`http://127.0.0.1:5173/costs`
+  - 后端接口：
+    - `GET /api/costs/contracts`
+    - `GET /api/costs/contracts/:id`
+- 当前成本利润页已经支持：
+  - 合同级成本利润列表
+  - 详情抽屉
+  - 多币种成本结构明细
+  - 销售金额 / 总成本 / 预计毛利 / 毛利率展示
+  - 关联合同 / 批次 / 采购单 / 物流单 / 销售单 / 应收 / Payment 上下文展示
+  - 汇率口径展示
+  - Demo 测算时间线展示
+- 当前阶段 17 的核心口径已经锁定：
+  - 优先复用真实 `Contract / Batch / PurchaseOrder / Shipment / SalesOrder / Receivable / Payment`
+  - 如果数据库中尚未录入 `CostItem`，则自动套用 Demo 演示测算模板
+  - Demo 模板会输出 6 类成本项：
+    - 采购成本
+    - 国际运费
+    - 清关费
+    - 仓储费
+    - 本地配送费
+    - 杂费
+  - Demo 模板采用多币种结构展示：
+    - 合同币种
+    - `CNY`
+    - `ZMW`
+  - 当前默认演示合同 `50000 USD` 会得到：
+    - 总成本 `38000 USD`
+    - 预计毛利 `12000 USD`
+    - 毛利率 `24%`
+  - 这一页当前只做测算展示，不会写入库存，也不会改 `QrItem`、`StockMovement`、`Receivable` 或 `Payment`
+- 当前页面必须始终明确标注：
+  - `成本利润为 Demo 演示数据，正式版将按真实费用单据和财务规则核算。`
+
+## 阶段 17 自测结果
+
+- 已通过：
+  - `npx tsc -p apps/server/tsconfig.json --noEmit`
+  - `npx tsc -p apps/web/tsconfig.json --noEmit`
+  - `npm run build --workspace @trade-ai-demo/web`
+- 已真实验证接口：
+  - `GET /api/costs/contracts`
+  - `GET /api/costs/contracts/:id`
+- 已验证当前演示合同测算结果：
+  - `销售金额 = 50000 USD`
+  - `总成本 = 38000 USD`
+  - `预计毛利 = 12000 USD`
+  - `毛利率 = 24%`
+  - 折算人民币口径：
+    - `销售金额 = 360000 CNY`
+    - `总成本 = 273600 CNY`
+    - `预计毛利 = 86400 CNY`
+- 已验证当前多币种成本结构明细包含：
+  - `USD`
+  - `CNY`
+  - `ZMW`
+- 当前阶段 17 为只读展示阶段：
+  - 本次没有新增任何写入型业务接口
+  - 本次没有改动库存、二维码或财务实收状态
+  - 成本项未落库时仅由后端接口按 Demo 模板实时计算返回
+
+## 当前下一步
+
+- 当前先等待你验证：
+  - `成本利润`
+- 你确认满意后：
+  - 再决定是否提交当前阶段相关 Git 变更
+  - 然后进入 `阶段 18：多公司主体展示模块`

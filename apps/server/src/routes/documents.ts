@@ -17,6 +17,7 @@ import { demoScenarioConfig } from "../config/demoScenario";
 import { env } from "../config/env";
 import { documentsUploadDir } from "../config/paths";
 import { prisma } from "../lib/prisma";
+import { standardScenarioIdentifiers } from "../services/demoFoundation";
 
 fs.mkdirSync(documentsUploadDir, { recursive: true });
 
@@ -273,18 +274,46 @@ function normalizeDocumentResponse(document: DocumentWithSummary) {
   };
 }
 
-function buildMockExtraction(documentId: string, documentType: DocumentType): Prisma.JsonObject {
+function normalizeDocumentBaseName(value: string | null | undefined) {
+  const decoded = decodePotentialMojibake(value);
+  const normalized = (decoded ?? value ?? "").trim();
+
+  return normalized.replace(/\.[^.]+$/, "");
+}
+
+function resolveStandardDemoDraftPair(documentType: DocumentType, originalName?: string | null) {
+  const baseName = normalizeDocumentBaseName(originalName);
+
+  if (
+    (documentType === DocumentType.CONTRACT && baseName === "演示合同-中国采购100箱") ||
+    (documentType === DocumentType.PACKING_LIST && baseName === "演示箱单-赞比亚仓库100箱")
+  ) {
+    return {
+      contractNoDraft: standardScenarioIdentifiers.contractNo,
+      batchNoDraft: standardScenarioIdentifiers.batchNo
+    };
+  }
+
+  return null;
+}
+
+function buildMockExtraction(
+  documentId: string,
+  documentType: DocumentType,
+  options?: { originalName?: string | null }
+): Prisma.JsonObject {
   const suffix = documentId.slice(-6).toUpperCase();
   const now = new Date();
   const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
     now.getDate()
   ).padStart(2, "0")}`;
+  const standardDraftPair = resolveStandardDemoDraftPair(documentType, options?.originalName);
 
   return {
     source: "mock-document-extractor-v1",
     documentType,
-    contractNoDraft: `CTR-${datePart}-${suffix}`,
-    batchNoDraft: `BAT-${datePart}-${suffix}`,
+    contractNoDraft: standardDraftPair?.contractNoDraft ?? `CTR-${datePart}-${suffix}`,
+    batchNoDraft: standardDraftPair?.batchNoDraft ?? `BAT-${datePart}-${suffix}`,
     productName: demoScenarioConfig.productName,
     customerName: demoScenarioConfig.customerName,
     supplierName: demoScenarioConfig.supplierName,
@@ -1002,8 +1031,10 @@ documentsRouter.post("/:id/extract", async (request, response) => {
     return;
   }
 
-  const extraction = buildMockExtraction(document.id, document.documentType);
   const readableOriginalName = decodePotentialMojibake(document.originalName) ?? document.fileName;
+  const extraction = buildMockExtraction(document.id, document.documentType, {
+    originalName: readableOriginalName
+  });
   const responseText = `已从 ${readableOriginalName} 识别出合同草稿、批次草稿和演示字段。`;
 
   const [updatedDocument] = await prisma.$transaction([

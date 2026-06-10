@@ -196,6 +196,14 @@ type DashboardOverviewResponse = {
     archiveTone: DashboardTone | null;
   };
   execution: {
+    contractTotalQuantity: number;
+    contractExecutingQuantity: number;
+    contractPendingExecutionQuantity: number;
+    focusBatchQuantity: number;
+    focusBatchInTransitQuantity: number;
+    focusBatchInStockQuantity: number;
+    focusBatchOutboundQuantity: number;
+    inboundScopeQuantity: number;
     totalQuantity: number;
     unit: string;
     inboundCompleted: number;
@@ -672,11 +680,20 @@ export function DashboardPage() {
                   />
                 ) : null}
 
+                {hasFocusedOrder ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="驾驶舱字段口径"
+                    description={`合同总量 = 商务承诺总数量；已进入执行 = 已生成二维码、已进入实际执行链路的数量；当前批次在库 = 当前主批次中已经扫码入库且尚未出库的真实数量。`}
+                  />
+                ) : null}
+
                 <div>
                   <div className="dashboard-progress-header">
                     <span>入库执行</span>
                     <strong>
-                      {data.execution.inboundCompleted}/{data.execution.totalQuantity}
+                      {data.execution.inboundCompleted}/{data.execution.inboundScopeQuantity}
                       {data.execution.unit}
                     </strong>
                   </div>
@@ -717,8 +734,46 @@ export function DashboardPage() {
                   <div>
                     <span className="app-header-panel-label">合同数量</span>
                     <strong>
+                      {hasFocusedOrder ? `${data.execution.contractTotalQuantity} ${data.execution.unit}` : "0"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">已进入执行</span>
+                    <strong>
+                      {hasFocusedOrder ? `${data.execution.contractExecutingQuantity} ${data.execution.unit}` : "0"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">合同待执行</span>
+                    <strong>
                       {hasFocusedOrder
-                        ? `${data.focus.contractQuantity ?? data.scenario.totalQuantity} ${data.focus.unit ?? data.scenario.unit}`
+                        ? `${data.execution.contractPendingExecutionQuantity} ${data.execution.unit}`
+                        : "0"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">当前执行批次量</span>
+                    <strong>{hasFocusedOrder ? `${data.execution.focusBatchQuantity} ${data.execution.unit}` : "0"}</strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">当前批次在途</span>
+                    <strong>
+                      {hasFocusedOrder
+                        ? `${data.execution.focusBatchInTransitQuantity} ${data.execution.unit}`
+                        : "0"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">当前批次在库</span>
+                    <strong>
+                      {hasFocusedOrder ? `${data.execution.focusBatchInStockQuantity} ${data.execution.unit}` : "0"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="app-header-panel-label">当前批次已出库</span>
+                    <strong>
+                      {hasFocusedOrder
+                        ? `${data.execution.focusBatchOutboundQuantity} ${data.execution.unit}`
                         : "0"}
                     </strong>
                   </div>
