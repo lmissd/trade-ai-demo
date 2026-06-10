@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import { aiAssistantRouter } from "./routes/ai-assistant";
 import { batchesRouter } from "./routes/batches";
+import { companiesRouter } from "./routes/companies";
 import { contractsRouter } from "./routes/contracts";
 import { uploadsRoot } from "./config/paths";
 import { costsRouter } from "./routes/costs";
@@ -47,6 +48,7 @@ export function createApp() {
   app.use("/api/documents", documentsRouter);
   app.use("/api/contracts", contractsRouter);
   app.use("/api/batches", batchesRouter);
+  app.use("/api/companies", companiesRouter);
   app.use("/api/costs", costsRouter);
   app.use("/api/procurement", procurementRouter);
   app.use("/api/logistics", logisticsRouter);
