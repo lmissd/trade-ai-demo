@@ -92,19 +92,23 @@ enum AiTaskStatus {
 }
 
 model User {
-  id             String          @id @default(cuid())
-  username       String          @unique
-  displayName    String
-  email          String?
-  phone          String?
-  role           SystemUserRole  @default(ADMIN)
-  status         String          @default("ACTIVE")
-  companyId      String?
-  departmentId   String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  stockMovements StockMovement[]
-  aiLogs         AiLog[]
+  id                  String          @id @default(cuid())
+  username            String          @unique
+  employeeNo          String?         @unique
+  displayName         String
+  email               String?
+  phone               String?
+  role                SystemUserRole  @default(ADMIN)
+  position            String?
+  status              String          @default("ACTIVE")
+  companyId           String?
+  departmentId        String?
+  workCountry         String?
+  responsibilityScope String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  stockMovements      StockMovement[]
+  aiLogs              AiLog[]
 }
 
 model Role {
@@ -130,9 +134,9 @@ model Permission {
 
 model UserRole {
   id        String   @id @default(cuid())
-  userId     String
-  roleId     String
-  createdAt  DateTime @default(now())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
 
   @@unique([userId, roleId])
 }
@@ -174,41 +178,58 @@ model Sku {
   skuCode                String   @unique
   name                   String
   spec                   String?
+  modelNo                String?
+  material               String?
   unit                   String
   category               String?
   purchaseReferencePrice Float?
   salesReferencePrice    Float?
+  referenceCurrency      String   @default("USD")
   status                 String   @default("ACTIVE")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
 
 model Customer {
-  id          String   @id @default(cuid())
-  customerCode String  @unique
-  name         String
-  country      String
-  contactName  String?
-  phone        String?
-  email        String?
-  address      String?
-  status       String   @default("ACTIVE")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  customerCode           String   @unique
+  name                   String
+  country                String
+  contactName            String?
+  phone                  String?
+  email                  String?
+  address                String?
+  taxNo                  String?
+  bankName               String?
+  bankAccountNo          String?
+  bankAddress            String?
+  cooperationCompanyId   String?
+  cooperationCompanyName String?
+  customerType           String   @default("CUSTOMER")
+  status                 String   @default("ACTIVE")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }
 
 model Supplier {
-  id           String   @id @default(cuid())
-  supplierCode String   @unique
-  name         String
-  country      String
-  contactName  String?
-  phone        String?
-  email        String?
-  address      String?
-  status       String   @default("ACTIVE")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  supplierCode           String   @unique
+  name                   String
+  country                String
+  contactName            String?
+  phone                  String?
+  email                  String?
+  address                String?
+  taxNo                  String?
+  bankName               String?
+  bankAccountNo          String?
+  bankAddress            String?
+  cooperationCompanyId   String?
+  cooperationCompanyName String?
+  supplierType           String   @default("SUPPLIER")
+  status                 String   @default("ACTIVE")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }
 
 model Warehouse {
@@ -236,25 +257,34 @@ model WarehouseLocation {
 }
 
 model Vehicle {
-  id          String   @id @default(cuid())
-  plateNo     String   @unique
-  companyId   String?
-  vehicleType String?
-  driverId    String?
-  status      String   @default("ACTIVE")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  vehicleCode        String?  @unique
+  vehicleQrCode      String?  @unique
+  plateNo            String   @unique
+  companyId          String?
+  vehicleType        String?
+  driverId           String?
+  driverName         String?
+  ownershipCompanyId String?
+  maintenanceNote    String?
+  status             String   @default("ACTIVE")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model Driver {
-  id        String   @id @default(cuid())
-  name      String
-  phone     String?
-  companyId String?
-  licenseNo String?
-  status    String   @default("ACTIVE")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  driverCode         String?  @unique
+  employeeNo         String?  @unique
+  name               String
+  phone              String?
+  companyId          String?
+  licenseNo          String?
+  workCountry        String?
+  rewardPenaltyNotes String?
+  status             String   @default("ACTIVE")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model DemoConfig {
@@ -314,9 +344,9 @@ model Document {
 }
 
 model Contract {
-  id                   String         @id @default(cuid())
-  contractNo           String         @unique
-  contractType         String         @default("TRADE")
+  id                   String          @id @default(cuid())
+  contractNo           String          @unique
+  contractType         String          @default("TRADE")
   customerId           String?
   customerName         String
   supplierId           String?
@@ -328,12 +358,12 @@ model Contract {
   amount               Float
   currency             String
   destinationWarehouse String
-  paymentStatus        String         @default("UNPAID")
-  status               ContractStatus @default(DRAFT)
+  paymentStatus        String          @default("UNPAID")
+  status               ContractStatus  @default(DRAFT)
   sourceDocumentId     String?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  sourceDocument       Document?      @relation(fields: [sourceDocumentId], references: [id])
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  sourceDocument       Document?       @relation(fields: [sourceDocumentId], references: [id])
   batches              Batch[]
   payments             Payment[]
   stockMovements       StockMovement[]
@@ -354,8 +384,8 @@ model ContractItem {
 }
 
 model Batch {
-  id                   String        @id @default(cuid())
-  batchNo              String        @unique
+  id                   String          @id @default(cuid())
+  batchNo              String          @unique
   contractId           String
   sourceDocumentId     String?
   skuId                String?
@@ -365,11 +395,11 @@ model Batch {
   unit                 String
   destinationWarehouse String
   warehouseId          String?
-  status               BatchStatus   @default(DRAFT)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  contract             Contract      @relation(fields: [contractId], references: [id])
-  sourceDocument       Document?     @relation(fields: [sourceDocumentId], references: [id])
+  status               BatchStatus     @default(DRAFT)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  contract             Contract        @relation(fields: [contractId], references: [id])
+  sourceDocument       Document?       @relation(fields: [sourceDocumentId], references: [id])
   qrItems              QrItem[]
   stockMovements       StockMovement[]
 }
@@ -436,16 +466,16 @@ model InventorySnapshot {
 }
 
 model StocktakeOrder {
-  id           String   @id @default(cuid())
-  stocktakeNo  String   @unique
+  id           String    @id @default(cuid())
+  stocktakeNo  String    @unique
   warehouseId  String?
-  status       String   @default("PENDING")
+  status       String    @default("PENDING")
   operatorId   String?
   operatorName String?
   startedAt    DateTime?
   completedAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model StocktakeItem {
@@ -461,8 +491,8 @@ model StocktakeItem {
 }
 
 model PurchaseOrder {
-  id           String   @id @default(cuid())
-  purchaseNo   String   @unique
+  id           String    @id @default(cuid())
+  purchaseNo   String    @unique
   contractId   String?
   supplierId   String?
   supplierName String
@@ -473,9 +503,9 @@ model PurchaseOrder {
   quantity     Int
   unit         String
   deliveryDate DateTime?
-  status       String   @default("DRAFT")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  status       String    @default("DRAFT")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model PurchaseOrderItem {
@@ -493,8 +523,8 @@ model PurchaseOrderItem {
 }
 
 model Shipment {
-  id                   String   @id @default(cuid())
-  shipmentNo           String   @unique
+  id                   String    @id @default(cuid())
+  shipmentNo           String    @unique
   contractId           String?
   batchId              String?
   purchaseOrderId      String?
@@ -506,42 +536,42 @@ model Shipment {
   departureTime        DateTime?
   estimatedArrivalTime DateTime?
   actualArrivalTime    DateTime?
-  status               String   @default("PENDING")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  status               String    @default("PENDING")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model ShipmentNode {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   shipmentId String
   nodeName   String
   nodeStatus String?
   nodeTime   DateTime?
   remark     String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 }
 
 model CustomsClearance {
-  id                    String   @id @default(cuid())
-  clearanceNo           String   @unique
-  contractId            String?
-  batchId               String?
-  shipmentId            String?
-  responsibleCompany    String?
-  responsiblePerson     String?
-  packingListDocumentId String?
-  invoiceDocumentId     String?
+  id                     String   @id @default(cuid())
+  clearanceNo            String   @unique
+  contractId             String?
+  batchId                String?
+  shipmentId             String?
+  responsibleCompany     String?
+  responsiblePerson      String?
+  packingListDocumentId  String?
+  invoiceDocumentId      String?
   billOfLadingDocumentId String?
-  certificateDocumentId String?
-  aiCheckResult         Json?
-  status                String   @default("PENDING")
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  certificateDocumentId  String?
+  aiCheckResult          Json?
+  status                 String   @default("PENDING")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }
 
 model PreReceiveOrder {
-  id                  String   @id @default(cuid())
-  preReceiveNo        String   @unique
+  id                  String    @id @default(cuid())
+  preReceiveNo        String    @unique
   contractId          String?
   batchId             String?
   warehouseId         String?
@@ -550,28 +580,14 @@ model PreReceiveOrder {
   quantity            Int
   unit                String
   suggestedLocation   String?
-  status              String   @default("PENDING")
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  status              String    @default("PENDING")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
 
 model InboundOrder {
-  id         String   @id @default(cuid())
-  inboundNo  String   @unique
-  contractId String?
-  batchId    String?
-  warehouseId String?
-  quantity   Int
-  unit       String
-  status     String   @default("PENDING")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-}
-
-model OutboundOrder {
   id          String   @id @default(cuid())
-  outboundNo  String   @unique
-  salesOrderId String?
+  inboundNo   String   @unique
   contractId  String?
   batchId     String?
   warehouseId String?
@@ -580,6 +596,20 @@ model OutboundOrder {
   status      String   @default("PENDING")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model OutboundOrder {
+  id           String   @id @default(cuid())
+  outboundNo   String   @unique
+  salesOrderId String?
+  contractId   String?
+  batchId      String?
+  warehouseId  String?
+  quantity     Int
+  unit         String
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model SalesOrder {
@@ -660,45 +690,45 @@ model Payment {
 }
 
 model Receivable {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   contractId     String?
   salesOrderId   String?
   customerId     String?
   amount         Float
   currency       String
   dueDate        DateTime?
-  receivedAmount Float    @default(0)
-  status         String   @default("UNPAID")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  receivedAmount Float     @default(0)
+  status         String    @default("UNPAID")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model Payable {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   contractId  String?
   supplierId  String?
   amount      Float
   currency    String
   dueDate     DateTime?
-  paidAmount  Float    @default(0)
-  status      String   @default("UNPAID")
+  paidAmount  Float     @default(0)
+  status      String    @default("UNPAID")
   payableType String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Invoice {
-  id          String   @id @default(cuid())
-  invoiceNo   String   @unique
+  id          String    @id @default(cuid())
+  invoiceNo   String    @unique
   contractId  String?
   invoiceType String
   amount      Float
   currency    String
   issueDate   DateTime?
-  status      String   @default("PENDING")
+  status      String    @default("PENDING")
   documentId  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model CostItem {
@@ -752,25 +782,25 @@ model Settlement {
 }
 
 model WorkOrder {
-  id                  String   @id @default(cuid())
-  workOrderNo         String   @unique
-  type                String
-  title               String
-  content             String?
+  id                    String    @id @default(cuid())
+  workOrderNo           String    @unique
+  type                  String
+  title                 String
+  content               String?
   responsibleDepartment String?
-  responsiblePerson   String?
-  status              String   @default("PENDING")
-  priority            String   @default("NORMAL")
-  startTime           DateTime?
-  dueTime             DateTime?
-  contractId          String?
-  batchId             String?
-  documentId          String?
-  relatedEntityType   String?
-  relatedEntityId     String?
-  completionCondition String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  responsiblePerson     String?
+  status                String    @default("PENDING")
+  priority              String    @default("NORMAL")
+  startTime             DateTime?
+  dueTime               DateTime?
+  contractId            String?
+  batchId               String?
+  documentId            String?
+  relatedEntityType     String?
+  relatedEntityId       String?
+  completionCondition   String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }
 
 model Approval {
@@ -786,29 +816,29 @@ model Approval {
 }
 
 model ApprovalStep {
-  id          String   @id @default(cuid())
-  approvalId  String
-  stepNo      Int
-  approverId  String?
+  id           String    @id @default(cuid())
+  approvalId   String
+  stepNo       Int
+  approverId   String?
   approverName String?
-  status      String   @default("PENDING")
-  comment     String?
-  approvedAt  DateTime?
-  createdAt   DateTime @default(now())
+  status       String    @default("PENDING")
+  comment      String?
+  approvedAt   DateTime?
+  createdAt    DateTime  @default(now())
 
   @@unique([approvalId, stepNo])
 }
 
 model Notification {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String?
   title             String
   content           String
   type              String
-  status            String   @default("UNREAD")
+  status            String    @default("UNREAD")
   relatedEntityType String?
   relatedEntityId   String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
   readAt            DateTime?
 }
 

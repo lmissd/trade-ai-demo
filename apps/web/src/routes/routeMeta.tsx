@@ -5,6 +5,7 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   CarOutlined,
+  DatabaseOutlined,
   DollarCircleOutlined,
   FileSearchOutlined,
   GlobalOutlined,
@@ -35,6 +36,10 @@ export const routeMetaByPath: Record<string, RouteMeta> = {
   "/documents": {
     title: "合同与单据",
     subtitle: "承接单据上传、AI Mock 识别、人工修正，以及确认生成正式合同与批次。"
+  },
+  "/master-data": {
+    title: "基础主数据",
+    subtitle: "统一管理 SKU、客商、人员、车辆和司机等业务底座，后续正式流程都应引用这里的主数据编码。"
   },
   "/contracts": {
     title: "合同数据",
@@ -97,6 +102,7 @@ export const routeMetaByPath: Record<string, RouteMeta> = {
 export const routeMenuEntries: RouteMenuEntry[] = [
   { key: "/dashboard", icon: <AppstoreOutlined />, label: "首页驾驶舱" },
   { key: "/documents", icon: <FileSearchOutlined />, label: "合同与单据" },
+  { key: "/master-data", icon: <DatabaseOutlined />, label: "基础主数据" },
   { key: "/procurement", icon: <ShoppingCartOutlined />, label: "采购与集货" },
   { key: "/logistics", icon: <GlobalOutlined />, label: "国际物流" },
   { key: "/customs", icon: <SafetyCertificateOutlined />, label: "报关清关" },

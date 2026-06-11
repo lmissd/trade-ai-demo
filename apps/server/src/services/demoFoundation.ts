@@ -502,20 +502,26 @@ export async function ensureDemoFoundation(db: DbClient): Promise<DemoFoundation
     update: {
       name: demoScenarioConfig.productName,
       spec: "Demo Standard",
+      modelNo: "CABLE-DEMO-100",
+      material: "Copper / PVC",
       unit: demoScenarioConfig.unit,
       category: "Demo Goods",
       purchaseReferencePrice: 300,
       salesReferencePrice: 500,
+      referenceCurrency: demoScenarioConfig.currency,
       status: "ACTIVE"
     },
     create: {
       skuCode: "SKU-DEMO-001",
       name: demoScenarioConfig.productName,
       spec: "Demo Standard",
+      modelNo: "CABLE-DEMO-100",
+      material: "Copper / PVC",
       unit: demoScenarioConfig.unit,
       category: "Demo Goods",
       purchaseReferencePrice: 300,
       salesReferencePrice: 500,
+      referenceCurrency: demoScenarioConfig.currency,
       status: "ACTIVE"
     }
   });
@@ -529,6 +535,13 @@ export async function ensureDemoFoundation(db: DbClient): Promise<DemoFoundation
       phone: "+260-000-000001",
       email: "buyer@abctrading.example",
       address: "Lusaka, Zambia",
+      taxNo: "ZM-TAX-DEMO-001",
+      bankName: "Zambia Demo Bank",
+      bankAccountNo: "ZM-DEMO-ACCOUNT-001",
+      bankAddress: "Lusaka Main Branch",
+      cooperationCompanyId: companies.get("ZM_OPERATIONS") ?? null,
+      cooperationCompanyName: "赞比亚公司",
+      customerType: "OVERSEAS_CUSTOMER",
       status: "ACTIVE"
     },
     create: {
@@ -539,6 +552,13 @@ export async function ensureDemoFoundation(db: DbClient): Promise<DemoFoundation
       phone: "+260-000-000001",
       email: "buyer@abctrading.example",
       address: "Lusaka, Zambia",
+      taxNo: "ZM-TAX-DEMO-001",
+      bankName: "Zambia Demo Bank",
+      bankAccountNo: "ZM-DEMO-ACCOUNT-001",
+      bankAddress: "Lusaka Main Branch",
+      cooperationCompanyId: companies.get("ZM_OPERATIONS") ?? null,
+      cooperationCompanyName: "赞比亚公司",
+      customerType: "OVERSEAS_CUSTOMER",
       status: "ACTIVE"
     }
   });
@@ -552,6 +572,13 @@ export async function ensureDemoFoundation(db: DbClient): Promise<DemoFoundation
       phone: "+86-000-0000001",
       email: "sales@china-supplier.example",
       address: "Shenzhen, China",
+      taxNo: "CN-TAX-DEMO-001",
+      bankName: "China Demo Bank",
+      bankAccountNo: "CN-DEMO-ACCOUNT-001",
+      bankAddress: "Shenzhen Demo Branch",
+      cooperationCompanyId: companies.get("CN_MAIN") ?? null,
+      cooperationCompanyName: "境内公司",
+      supplierType: "DOMESTIC_SUPPLIER",
       status: "ACTIVE"
     },
     create: {
@@ -562,6 +589,13 @@ export async function ensureDemoFoundation(db: DbClient): Promise<DemoFoundation
       phone: "+86-000-0000001",
       email: "sales@china-supplier.example",
       address: "Shenzhen, China",
+      taxNo: "CN-TAX-DEMO-001",
+      bankName: "China Demo Bank",
+      bankAccountNo: "CN-DEMO-ACCOUNT-001",
+      bankAddress: "Shenzhen Demo Branch",
+      cooperationCompanyId: companies.get("CN_MAIN") ?? null,
+      cooperationCompanyName: "境内公司",
+      supplierType: "DOMESTIC_SUPPLIER",
       status: "ACTIVE"
     }
   });
@@ -626,25 +660,134 @@ export async function ensureDemoFoundation(db: DbClient): Promise<DemoFoundation
   const demoUser = await db.user.upsert({
     where: { username: "demo-owner" },
     update: {
+      employeeNo: "EMP-HK-OWNER-001",
       displayName: "Demo Owner",
       email: "owner@trade-ai-demo.local",
       phone: "+852-0000-0001",
       role: SystemUserRole.OWNER,
+      position: "集团演示负责人",
       status: "ACTIVE",
       companyId: companies.get("HK_SETTLEMENT") ?? null,
-      departmentId: departmentIds.get("FINANCE") ?? null
+      departmentId: departmentIds.get("FINANCE") ?? null,
+      workCountry: "Hong Kong SAR",
+      responsibilityScope: "拥有演示环境最高权限，负责重置演示数据、财务视角和整体流程验收。"
     },
     create: {
       username: "demo-owner",
+      employeeNo: "EMP-HK-OWNER-001",
       displayName: "Demo Owner",
       email: "owner@trade-ai-demo.local",
       phone: "+852-0000-0001",
       role: SystemUserRole.OWNER,
+      position: "集团演示负责人",
       status: "ACTIVE",
       companyId: companies.get("HK_SETTLEMENT") ?? null,
-      departmentId: departmentIds.get("FINANCE") ?? null
+      departmentId: departmentIds.get("FINANCE") ?? null,
+      workCountry: "Hong Kong SAR",
+      responsibilityScope: "拥有演示环境最高权限，负责重置演示数据、财务视角和整体流程验收。"
     }
   });
+
+  const operatorUserSeeds = [
+    {
+      username: "procurement-operator",
+      employeeNo: "EMP-CN-PROC-001",
+      displayName: "采购操作员",
+      email: "procurement@trade-ai-demo.local",
+      phone: "+86-000-0000002",
+      role: SystemUserRole.ADMIN,
+      position: "采购专员",
+      companyId: companies.get("CN_MAIN") ?? null,
+      departmentId: departmentIds.get("PROCUREMENT") ?? null,
+      workCountry: "China",
+      responsibilityScope: "负责供应商跟进、采购下单和国内集货前置资料维护。"
+    },
+    {
+      username: "warehouse-operator",
+      employeeNo: "EMP-ZM-WH-001",
+      displayName: "仓库操作员",
+      email: "warehouse@trade-ai-demo.local",
+      phone: "+260-000-000002",
+      role: SystemUserRole.WAREHOUSE,
+      position: "仓储主管",
+      companyId: companies.get("ZM_OPERATIONS") ?? null,
+      departmentId: departmentIds.get("WAREHOUSE") ?? null,
+      workCountry: "Zambia",
+      responsibilityScope: "负责预收货、扫码入库、扫码出库和库存异常记录。"
+    },
+    {
+      username: "customs-operator",
+      employeeNo: "EMP-ZM-CUS-001",
+      displayName: "清关操作员",
+      email: "customs@trade-ai-demo.local",
+      phone: "+260-000-000003",
+      role: SystemUserRole.ADMIN,
+      position: "清关专员",
+      companyId: companies.get("ZM_OPERATIONS") ?? null,
+      departmentId: departmentIds.get("CUSTOMS") ?? null,
+      workCountry: "Zambia",
+      responsibilityScope: "负责清关资料包、单据一致性检查和清关任务跟进。"
+    },
+    {
+      username: "sales-operator",
+      employeeNo: "EMP-ZM-SALES-001",
+      displayName: "销售配送员",
+      email: "sales@trade-ai-demo.local",
+      phone: "+260-000-000004",
+      role: SystemUserRole.ADMIN,
+      position: "销售配送专员",
+      companyId: companies.get("ZM_OPERATIONS") ?? null,
+      departmentId: departmentIds.get("SALES") ?? null,
+      workCountry: "Zambia",
+      responsibilityScope: "负责销售单、配送任务、客户签收和售后前置沟通。"
+    },
+    {
+      username: "finance-operator",
+      employeeNo: "EMP-HK-FIN-001",
+      displayName: "财务回款员",
+      email: "finance@trade-ai-demo.local",
+      phone: "+852-0000-0002",
+      role: SystemUserRole.FINANCE,
+      position: "财务专员",
+      companyId: companies.get("HK_SETTLEMENT") ?? null,
+      departmentId: departmentIds.get("FINANCE") ?? null,
+      workCountry: "Hong Kong SAR",
+      responsibilityScope: "负责应收、回款、核销和逾期催收跟进。"
+    }
+  ];
+
+  for (const userSeed of operatorUserSeeds) {
+    await db.user.upsert({
+      where: { username: userSeed.username },
+      update: {
+        employeeNo: userSeed.employeeNo,
+        displayName: userSeed.displayName,
+        email: userSeed.email,
+        phone: userSeed.phone,
+        role: userSeed.role,
+        position: userSeed.position,
+        companyId: userSeed.companyId,
+        departmentId: userSeed.departmentId,
+        workCountry: userSeed.workCountry,
+        responsibilityScope: userSeed.responsibilityScope,
+        status: "ACTIVE"
+      },
+      create: {
+        username: userSeed.username,
+        employeeNo: userSeed.employeeNo,
+        displayName: userSeed.displayName,
+        email: userSeed.email,
+        phone: userSeed.phone,
+        role: userSeed.role,
+        position: userSeed.position,
+        companyId: userSeed.companyId,
+        departmentId: userSeed.departmentId,
+        workCountry: userSeed.workCountry,
+        responsibilityScope: userSeed.responsibilityScope,
+        status: "ACTIVE"
+      }
+    });
+  }
 
   const ownerRoleId = roleIds.get("OWNER");
 
@@ -660,6 +803,112 @@ export async function ensureDemoFoundation(db: DbClient): Promise<DemoFoundation
       create: {
         userId: demoUser.id,
         roleId: ownerRoleId
+      }
+    });
+  }
+
+  const driverSeeds = [
+    {
+      driverCode: "DRV-ZM-001",
+      employeeNo: "DRVEMP-ZM-001",
+      name: "Mwansa Demo Driver",
+      phone: "+260-000-100001",
+      companyId: companies.get("ZM_OPERATIONS") ?? null,
+      licenseNo: "ZM-LIC-DEMO-001",
+      workCountry: "Zambia",
+      rewardPenaltyNotes: "Demo 司机，无奖惩异常，默认可承接赞比亚本地配送任务。"
+    },
+    {
+      driverCode: "DRV-CD-001",
+      employeeNo: "DRVEMP-CD-001",
+      name: "Kabila Demo Driver",
+      phone: "+243-000-100001",
+      companyId: companies.get("CD_OPERATIONS") ?? null,
+      licenseNo: "CD-LIC-DEMO-001",
+      workCountry: "Democratic Republic of the Congo",
+      rewardPenaltyNotes: "Demo 司机，用于演示第二海外运营主体的配送人员储备。"
+    }
+  ];
+
+  const drivers = new Map<string, { id: string; name: string }>();
+
+  for (const driverSeed of driverSeeds) {
+    const driver = await db.driver.upsert({
+      where: { driverCode: driverSeed.driverCode },
+      update: {
+        employeeNo: driverSeed.employeeNo,
+        name: driverSeed.name,
+        phone: driverSeed.phone,
+        companyId: driverSeed.companyId,
+        licenseNo: driverSeed.licenseNo,
+        workCountry: driverSeed.workCountry,
+        rewardPenaltyNotes: driverSeed.rewardPenaltyNotes,
+        status: "ACTIVE"
+      },
+      create: {
+        driverCode: driverSeed.driverCode,
+        employeeNo: driverSeed.employeeNo,
+        name: driverSeed.name,
+        phone: driverSeed.phone,
+        companyId: driverSeed.companyId,
+        licenseNo: driverSeed.licenseNo,
+        workCountry: driverSeed.workCountry,
+        rewardPenaltyNotes: driverSeed.rewardPenaltyNotes,
+        status: "ACTIVE"
+      }
+    });
+
+    drivers.set(driver.driverCode ?? driverSeed.driverCode, { id: driver.id, name: driver.name });
+  }
+
+  const vehicleSeeds = [
+    {
+      vehicleCode: "VEH-ZM-001",
+      vehicleQrCode: "VEHQR-ZM-001",
+      plateNo: "ZM-DEMO-001",
+      companyId: companies.get("ZM_OPERATIONS") ?? null,
+      ownershipCompanyId: companies.get("ZM_OPERATIONS") ?? null,
+      vehicleType: "Box Truck",
+      driver: drivers.get("DRV-ZM-001") ?? null,
+      maintenanceNote: "车辆状态正常，可用于赞比亚本地销售配送。"
+    },
+    {
+      vehicleCode: "VEH-CD-001",
+      vehicleQrCode: "VEHQR-CD-001",
+      plateNo: "CD-DEMO-001",
+      companyId: companies.get("CD_OPERATIONS") ?? null,
+      ownershipCompanyId: companies.get("CD_OPERATIONS") ?? null,
+      vehicleType: "Light Truck",
+      driver: drivers.get("DRV-CD-001") ?? null,
+      maintenanceNote: "备用配送车辆，用于演示刚果金主体车辆台账。"
+    }
+  ];
+
+  for (const vehicleSeed of vehicleSeeds) {
+    await db.vehicle.upsert({
+      where: { vehicleCode: vehicleSeed.vehicleCode },
+      update: {
+        vehicleQrCode: vehicleSeed.vehicleQrCode,
+        plateNo: vehicleSeed.plateNo,
+        companyId: vehicleSeed.companyId,
+        ownershipCompanyId: vehicleSeed.ownershipCompanyId,
+        vehicleType: vehicleSeed.vehicleType,
+        driverId: vehicleSeed.driver?.id ?? null,
+        driverName: vehicleSeed.driver?.name ?? null,
+        maintenanceNote: vehicleSeed.maintenanceNote,
+        status: "ACTIVE"
+      },
+      create: {
+        vehicleCode: vehicleSeed.vehicleCode,
+        vehicleQrCode: vehicleSeed.vehicleQrCode,
+        plateNo: vehicleSeed.plateNo,
+        companyId: vehicleSeed.companyId,
+        ownershipCompanyId: vehicleSeed.ownershipCompanyId,
+        vehicleType: vehicleSeed.vehicleType,
+        driverId: vehicleSeed.driver?.id ?? null,
+        driverName: vehicleSeed.driver?.name ?? null,
+        maintenanceNote: vehicleSeed.maintenanceNote,
+        status: "ACTIVE"
       }
     });
   }

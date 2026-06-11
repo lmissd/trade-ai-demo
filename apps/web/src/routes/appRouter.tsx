@@ -10,6 +10,7 @@ import { DashboardPage } from "../pages/DashboardPage";
 import { DocumentsPage } from "../pages/DocumentsPage";
 import { FinancePage } from "../pages/FinancePage";
 import { LogisticsPage } from "../pages/LogisticsPage";
+import { MasterDataPage } from "../pages/MasterDataPage";
 import { ProcurementPage } from "../pages/ProcurementPage";
 import { QrItemsPage } from "../pages/QrItemsPage";
 import { ReportsPage } from "../pages/ReportsPage";
@@ -33,6 +34,10 @@ export const appRouter = createBrowserRouter([
       {
         path: "/documents",
         element: <DocumentsPage />
+      },
+      {
+        path: "/master-data",
+        element: <MasterDataPage />
       },
       {
         path: "/contracts",

@@ -13,6 +13,7 @@ import { financeRouter } from "./routes/finance";
 import { healthRouter } from "./routes/health";
 import { inventoryRouter } from "./routes/inventory";
 import { logisticsRouter } from "./routes/logistics";
+import { masterDataRouter } from "./routes/master-data";
 import { procurementRouter } from "./routes/procurement";
 import { qrItemsRouter } from "./routes/qr-items";
 import { salesRouter } from "./routes/sales";
@@ -57,6 +58,7 @@ export function createApp() {
   app.use("/api/sales", salesRouter);
   app.use("/api/finance", financeRouter);
   app.use("/api/inventory", inventoryRouter);
+  app.use("/api/master-data", masterDataRouter);
   app.use("/api/ai-assistant", aiAssistantRouter);
   app.use("/api/qr-items", qrItemsRouter);
   app.use("/api/warehouse", warehouseRouter);

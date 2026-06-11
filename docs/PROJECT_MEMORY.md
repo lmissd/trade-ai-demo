@@ -1900,6 +1900,118 @@
   - 阶段 20 允许进入 git commit / push。
   - 提交完成后，继续按 TODO 开始 `阶段 21：基础主数据强化`。
 
+## 最近一次阶段 21：基础主数据强化
+
+- 本次已完成 `Demo 2.0` 的第一个大环节：`阶段 21：基础主数据强化`。
+- 本次新增正式页面：
+  - 左侧菜单：`基础主数据`
+  - 页面路径：`/master-data`
+  - 前端文件：`apps/web/src/pages/MasterDataPage.tsx`
+- 本次新增后端接口：
+  - `GET /api/master-data/overview`
+    - 汇总 SKU、客户、供应商、人员、车辆、司机、公司、部门
+  - `PATCH /api/master-data/:domain/:id/status`
+    - 支持 `skus / customers / suppliers / users / vehicles / drivers`
+    - 支持启用 / 停用
+    - 车辆额外支持 `MAINTENANCE`
+    - 每次状态变化写入 `AuditLog`
+- 本次新增数据库迁移：
+  - `20260611122000_stage21_master_data`
+  - `20260611123000_stage21_master_data_unique_indexes`
+- 本次扩充了主数据字段：
+  - `Sku`
+    - `modelNo`
+    - `material`
+    - `referenceCurrency`
+  - `Customer`
+    - `taxNo`
+    - `bankName`
+    - `bankAccountNo`
+    - `bankAddress`
+    - `cooperationCompanyId`
+    - `cooperationCompanyName`
+    - `customerType`
+  - `Supplier`
+    - `taxNo`
+    - `bankName`
+    - `bankAccountNo`
+    - `bankAddress`
+    - `cooperationCompanyId`
+    - `cooperationCompanyName`
+    - `supplierType`
+  - `User`
+    - `employeeNo`
+    - `position`
+    - `workCountry`
+    - `responsibilityScope`
+  - `Vehicle`
+    - `vehicleCode`
+    - `vehicleQrCode`
+    - `driverName`
+    - `ownershipCompanyId`
+    - `maintenanceNote`
+  - `Driver`
+    - `driverCode`
+    - `employeeNo`
+    - `workCountry`
+    - `rewardPenaltyNotes`
+- 本次更新了标准演示 seed：
+  - SKU 默认具备规格、型号、材质、参考价和币种
+  - 客户与供应商默认具备统一编码、税号、开户地址和合作主体
+  - 人员从单一 `demo-owner` 扩展为 6 个演示人员：
+    - `demo-owner`
+    - `procurement-operator`
+    - `warehouse-operator`
+    - `customs-operator`
+    - `sales-operator`
+    - `finance-operator`
+  - 新增 2 个演示司机：
+    - `DRV-ZM-001`
+    - `DRV-CD-001`
+  - 新增 2 台演示车辆：
+    - `VEH-ZM-001`
+    - `VEH-CD-001`
+  - 已建立一车一码、一车绑定司机的演示关系
+- 本次同步优化启动脚本：
+  - `apps/server/package.json` 的 `dev` 会先执行 `prisma:migrate`
+  - 这样后续双击启动时能自动应用新增数据库迁移
+- 当前阶段 21 的边界：
+  - 已做统一台账、字段补齐、状态启停、责任追溯
+  - 未做复杂主数据审批
+  - 未做完整主数据版本治理
+  - 未做公司级权限隔离
+  - 未做复杂车辆调度、司机奖惩流程
+- 本次真实自测结果：
+  - `npm run prisma:migrate --workspace @trade-ai-demo/server` 通过
+  - `npm run prisma:generate --workspace @trade-ai-demo/server` 通过
+  - `npm run prisma:seed --workspace @trade-ai-demo/server` 通过
+  - `npx tsc -p apps/server/tsconfig.json --noEmit` 通过
+  - `npx tsc -p apps/web/tsconfig.json --noEmit` 通过
+  - `npm run build --workspace @trade-ai-demo/server` 通过
+  - `npm run build --workspace @trade-ai-demo/web` 通过
+  - `GET /api/master-data/overview` 通过
+  - 主数据状态切换接口已测试：
+    - 车辆状态切到 `MAINTENANCE`
+    - 再恢复到 `ACTIVE`
+    - 审计日志新增 2 条
+  - 测试后已调用 `POST /api/setup/reset-demo` 恢复空白演示起点
+  - 恢复后 `AuditLog = 0`
+  - 恢复后主数据仍保留：
+    - SKU 1
+    - 客户 1
+    - 供应商 1
+    - 人员 6
+    - 车辆 2
+    - 司机 2
+    - 公司 5
+    - 部门 6
+  - 已用本机无头浏览器打开 `http://127.0.0.1:5173/master-data` 做页面验收
+- 阶段 21 完成后，下一步应进入：
+  - `阶段 22：合同与单据业务化深化`
+- 但当前仍然遵守你的规则：
+  - 先等你验证阶段 21 效果
+  - 你确认前，不提交本地 git，也不 push GitHub
+
 ## 阶段 19 已完成内容
 
 - 阶段 19 已从占位页升级为真实的“自动工单中心”：
@@ -2253,13 +2365,16 @@
 
 - 当前已完成：
   - `Demo 1.0：核心真实闭环`
-  - `Demo 1.5：成熟 ERP 模块包装` 的 `阶段 10 - 阶段 19`
+  - `Demo 1.5：成熟 ERP 模块包装` 的 `阶段 10 - 阶段 20`
   - `AI 助手真实流程现状问答补强`
+  - `Demo 2.0：接近真实业务系统` 的 `阶段 21：基础主数据强化`
 - 当前下一步：
-  - 进入 `阶段 20：数据报表与业务大盘`
-- 阶段 20 完成后：
-  - 进入 `Demo 2.0：接近真实业务系统`
-  - 严格从 `阶段 21` 开始，不跳阶段
+  - 等待你验证 `阶段 21：基础主数据强化`
+  - 你确认后，再提交本地 git 并 push GitHub
+  - 提交后进入 `阶段 22：合同与单据业务化深化`
+- 阶段 21 完成后：
+  - `Demo 2.0` 已经正式开始
+  - 后续严格从 `阶段 22` 继续，不跳阶段
 - 后续固定执行规则：
   - 一次只做一个大环节
   - 完成后先自测
