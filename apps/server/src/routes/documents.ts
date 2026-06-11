@@ -136,6 +136,7 @@ const generatedPurchaseOrderSelect = {
   skuName: true,
   quantity: true,
   unit: true,
+  deliveryDate: true,
   createdAt: true
 } as const;
 
@@ -606,6 +607,60 @@ async function loadExistingGeneratedBusinessData(tx: Prisma.TransactionClient, d
     payment,
     receivable
   };
+}
+
+function buildSupplierFollowUpWorkOrderNo(purchaseNo: string) {
+  return `WO-PROC-${purchaseNo.replace(/^PO-/, "")}`;
+}
+
+async function ensureSupplierFollowUpWorkOrder(
+  tx: Prisma.TransactionClient,
+  input: {
+    purchaseOrder: Prisma.PurchaseOrderGetPayload<{ select: typeof generatedPurchaseOrderSelect }>;
+    contractId: string;
+    batchId: string | null;
+  }
+) {
+  const existingWorkOrder = await tx.workOrder.findFirst({
+    where: {
+      type: "SUPPLIER_DELIVERY_FOLLOW_UP",
+      relatedEntityType: "PurchaseOrder",
+      relatedEntityId: input.purchaseOrder.id
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (existingWorkOrder) {
+    return existingWorkOrder;
+  }
+
+  const startTime = new Date();
+  const dueTime = input.purchaseOrder.deliveryDate ?? new Date(Date.now() + 3 * ONE_DAY_IN_MS);
+
+  return tx.workOrder.create({
+    data: {
+      workOrderNo: buildSupplierFollowUpWorkOrderNo(input.purchaseOrder.purchaseNo),
+      type: "SUPPLIER_DELIVERY_FOLLOW_UP",
+      title: "供应商发货跟进工单",
+      content: `采购单 ${input.purchaseOrder.purchaseNo} 已创建，请继续跟进供应商发货与国内集货。`,
+      responsibleDepartment: "采购部",
+      responsiblePerson: "Demo Procurement Owner",
+      status: "PENDING",
+      priority: "NORMAL",
+      startTime,
+      dueTime,
+      contractId: input.contractId,
+      batchId: input.batchId,
+      relatedEntityType: "PurchaseOrder",
+      relatedEntityId: input.purchaseOrder.id,
+      completionCondition: "确认供应商发货并完成国内集货，然后交接国际物流。"
+    },
+    select: {
+      id: true
+    }
+  });
 }
 
 async function resolveAuditActor(tx: Prisma.TransactionClient | typeof prisma): Promise<AuditActor> {
@@ -1150,10 +1205,18 @@ documentsRouter.post("/:id/confirm", async (request, response) => {
     const result = await prisma.$transaction(async (tx) => {
       const existing = await loadExistingGeneratedBusinessData(tx, document.id);
 
-      if (existing) {
-        await tx.document.update({
-          where: { id: document.id },
-          data: {
+        if (existing) {
+          if (existing.purchaseOrder) {
+            await ensureSupplierFollowUpWorkOrder(tx, {
+              purchaseOrder: existing.purchaseOrder,
+              contractId: existing.contract.id,
+              batchId: existing.batch?.id ?? null
+            });
+          }
+
+          await tx.document.update({
+            where: { id: document.id },
+            data: {
             businessCreated: true,
             relatedEntityType: document.relatedEntityType ?? "CONTRACT",
             relatedEntityId: document.relatedEntityId ?? existing.contract.id,
@@ -1281,6 +1344,12 @@ documentsRouter.post("/:id/confirm", async (request, response) => {
           amount: draft.amount,
           currency: draft.currency
         }
+      });
+
+      await ensureSupplierFollowUpWorkOrder(tx, {
+        purchaseOrder,
+        contractId: contract.id,
+        batchId: batch.id
       });
 
       const payment = await tx.payment.create({

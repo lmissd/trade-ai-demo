@@ -3,6 +3,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 
 export const warehouseRouter = Router();
+const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 type ScanOperationType = "INBOUND" | "OUTBOUND";
 
@@ -82,6 +83,84 @@ async function resolveOperator() {
       displayName: true
     }
   });
+}
+
+function buildWarehouseOutboundWorkOrderNo(outboundNo: string) {
+  return `WO-OUT-${outboundNo.replace(/^OUT-/, "")}`;
+}
+
+async function ensureWarehouseOutboundPickingWorkOrder(input: {
+  contractId: string;
+  batchId: string;
+  salesOrder: {
+    id: string;
+    salesNo: string;
+    customerName: string;
+  };
+  outboundOrder: {
+    id: string;
+    outboundNo: string;
+  };
+}) {
+  const existingWorkOrder = await prisma.workOrder.findFirst({
+    where: {
+      type: "WAREHOUSE_OUTBOUND_PICKING",
+      relatedEntityType: "OutboundOrder",
+      relatedEntityId: input.outboundOrder.id
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (existingWorkOrder) {
+    return existingWorkOrder;
+  }
+
+  const startTime = new Date();
+  const dueTime = new Date(startTime.getTime() + 2 * ONE_DAY_IN_MS);
+
+  try {
+    return await prisma.workOrder.create({
+      data: {
+        workOrderNo: buildWarehouseOutboundWorkOrderNo(input.outboundOrder.outboundNo),
+        type: "WAREHOUSE_OUTBOUND_PICKING",
+        title: "仓库出库工单",
+        content: `销售单 ${input.salesOrder.salesNo} 已建立，请根据出库任务 ${input.outboundOrder.outboundNo} 完成拣货、复核与扫码出库。`,
+        responsibleDepartment: "仓库部",
+        responsiblePerson: "Demo Warehouse Owner",
+        status: "PENDING",
+        priority: "NORMAL",
+        startTime,
+        dueTime,
+        contractId: input.contractId,
+        batchId: input.batchId,
+        relatedEntityType: "OutboundOrder",
+        relatedEntityId: input.outboundOrder.id,
+        completionCondition: "完成拣货、复核和扫码出库，并把货物交接给配送环节。"
+      },
+      select: {
+        id: true
+      }
+    });
+  } catch (error) {
+    const existingAfterConflict = await prisma.workOrder.findFirst({
+      where: {
+        type: "WAREHOUSE_OUTBOUND_PICKING",
+        relatedEntityType: "OutboundOrder",
+        relatedEntityId: input.outboundOrder.id
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (existingAfterConflict) {
+      return existingAfterConflict;
+    }
+
+    throw error;
+  }
 }
 
 async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: string | null) {
@@ -308,6 +387,20 @@ async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: str
       }
     });
   }
+
+  await ensureWarehouseOutboundPickingWorkOrder({
+    contractId: resolvedBatch.contractId,
+    batchId: resolvedBatch.id,
+    salesOrder: {
+      id: salesOrder.id,
+      salesNo: salesOrder.salesNo,
+      customerName: salesOrder.customerName
+    },
+    outboundOrder: {
+      id: outboundOrder.id,
+      outboundNo: outboundOrder.outboundNo
+    }
+  });
 
   return {
     batch: resolvedBatch,

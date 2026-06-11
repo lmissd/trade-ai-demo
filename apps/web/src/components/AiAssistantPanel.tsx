@@ -61,6 +61,7 @@ type AiAssistantAnswer = {
   question: string;
   detectedIntent:
     | "ASSISTANT_STATUS"
+    | "PROCESS_STATUS"
     | "BATCH_INVENTORY"
     | "CONTRACT_INVENTORY"
     | "TODAY_INBOUND"
@@ -89,13 +90,14 @@ type AiAssistantPanelProps = {
 
 const intentLabelMap: Record<AiAssistantAnswer["detectedIntent"], string> = {
   ASSISTANT_STATUS: "助手状态",
+  PROCESS_STATUS: "流程现状",
   BATCH_INVENTORY: "批次库存",
   CONTRACT_INVENTORY: "合同库存",
   TODAY_INBOUND: "今日入库",
   TODAY_OUTBOUND: "今日出库",
   QR_LIFECYCLE: "二维码生命周期",
   UNPAID_CONTRACTS: "未回款合同",
-  OVERVIEW: "库存总览"
+  OVERVIEW: "全链路总览"
 };
 
 const sourceLabelMap: Record<AiAssistantStatus["source"], string> = {
@@ -334,7 +336,7 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
       </div>
 
       <div className="placeholder-badges">
-        <Tag color="blue">真实库存问答</Tag>
+        <Tag color="blue">真实流程问答</Tag>
         <Tag color="cyan">后端受控查询</Tag>
         <Tag color={status?.llmEnabled ? "green" : "orange"}>
           {status?.llmEnabled ? "升级版 AI 已启用" : "本地模板模式"}
@@ -377,7 +379,7 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
     <Card className="placeholder-card" title="直接提问">
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          支持批次库存、合同库存、指定日期入库/出库、二维码生命周期和未回款合同等问题。
+          支持询问当前流程走到哪一步、卡在哪个环节，以及批次库存、合同库存、指定日期入库/出库、二维码生命周期和未回款合同等问题。
         </Typography.Paragraph>
 
         <Space.Compact style={{ width: "100%" }}>
@@ -574,7 +576,7 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
           </div>
         </Space>
       ) : (
-        <Empty description="提一个问题后，这里会展示 AI 基于真实库存数据生成的回答。" />
+        <Empty description="提一个问题后，这里会展示 AI 基于真实业务状态与库存数据生成的回答。" />
       )}
     </Card>
   );

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { answerInventoryQuestion, getAiAssistantStatus } from "../services/aiAssistant";
+import { answerAssistantQuestion, getAiAssistantStatus } from "../services/aiAssistant";
 import { clearAiAssistantConfig, getAiAssistantConfigStatus, saveAiAssistantConfig } from "../services/aiAssistantConfig";
 
 export const aiAssistantRouter = Router();
@@ -61,7 +61,7 @@ aiAssistantRouter.post("/ask", async (request, response) => {
   }
 
   try {
-    response.json(await answerInventoryQuestion(question));
+    response.json(await answerAssistantQuestion(question));
   } catch (error) {
     response.status(500).json({
       message: error instanceof Error ? error.message : "AI assistant failed to answer the question."

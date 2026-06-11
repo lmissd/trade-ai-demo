@@ -18,6 +18,7 @@ import { qrItemsRouter } from "./routes/qr-items";
 import { salesRouter } from "./routes/sales";
 import { setupRouter } from "./routes/setup";
 import { warehouseRouter } from "./routes/warehouse";
+import { workOrdersRouter } from "./routes/work-orders";
 
 export function createApp() {
   const app = express();
@@ -59,6 +60,7 @@ export function createApp() {
   app.use("/api/ai-assistant", aiAssistantRouter);
   app.use("/api/qr-items", qrItemsRouter);
   app.use("/api/warehouse", warehouseRouter);
+  app.use("/api/work-orders", workOrdersRouter);
 
   return app;
 }
