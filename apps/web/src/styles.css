@@ -323,6 +323,30 @@ a {
   color: #c55a11;
 }
 
+.documents-format-hints {
+  display: grid;
+  gap: 10px;
+}
+
+.documents-format-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(59, 130, 246, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.9), rgba(255, 251, 235, 0.72));
+}
+
+.spreadsheet-preview-card .ant-table-wrapper,
+.spreadsheet-preview-card .ant-table-container {
+  width: 100%;
+  min-width: 0;
+}
+
+.spreadsheet-preview-card .ant-table-content {
+  overflow-x: auto;
+}
+
 .documents-primary-text {
   color: #17243a;
   font-weight: 600;

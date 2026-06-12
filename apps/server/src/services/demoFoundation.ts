@@ -1072,7 +1072,7 @@ export async function ensureStandardDemoBusinessScenario(
   const contract = await db.contract.create({
     data: {
       contractNo: standardScenarioIdentifiers.contractNo,
-      contractType: "TRADE",
+      contractType: "PURCHASE",
       customerId: foundation.demoCustomer.id,
       customerName: foundation.demoCustomer.name,
       supplierId: foundation.demoSupplier.id,
@@ -1085,6 +1085,45 @@ export async function ensureStandardDemoBusinessScenario(
       currency: scenario.currency,
       destinationWarehouse: scenario.destinationWarehouse,
       paymentStatus: PaymentStatus.UNPAID,
+      executionStatus: "WAITING_RECEIPT",
+      executionProgress: 85,
+      isOverdue: false,
+      overdueDays: 0,
+      breachStatus: "NONE",
+      plannedReceiptAmount: scenario.amount,
+      actualReceiptAmount: 0,
+      plannedPaymentAmount: 30000,
+      actualPaymentAmount: 0,
+      receiptPaymentPlanJson: toJsonObject({
+        receiptPlan: [
+          {
+            name: "客户回款计划",
+            plannedAmount: scenario.amount,
+            actualAmount: 0,
+            currency: scenario.currency,
+            dueDate: receivableDueAt.toISOString(),
+            status: "UNPAID"
+          }
+        ],
+        paymentPlan: [
+          {
+            name: "供应商付款计划",
+            plannedAmount: 30000,
+            actualAmount: 0,
+            currency: scenario.currency,
+            status: "DEMO_NOT_POSTED"
+          }
+        ],
+        comparison: {
+          plannedReceiptAmount: scenario.amount,
+          actualReceiptAmount: 0,
+          plannedPaymentAmount: 30000,
+          actualPaymentAmount: 0,
+          receiptGap: scenario.amount,
+          paymentGap: 30000
+        },
+        note: "标准演示 seed 的阶段22合同执行计划底座。"
+      }),
       status: ContractStatus.ACTIVE,
       sourceDocumentId: contractDocumentId,
       createdAt: contractCreatedAt,

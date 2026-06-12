@@ -19,6 +19,8 @@ enum DocumentType {
   PACKING_LIST
   BILL_OF_LADING
   INVOICE
+  CERTIFICATE_OF_ORIGIN
+  CUSTOMS_ATTACHMENT
   OTHER
 }
 
@@ -34,6 +36,15 @@ enum DocumentStatus {
   REPLACED
   ARCHIVED
   DELETED
+}
+
+enum DocumentMatchStatus {
+  UNMATCHED
+  AUTO_MATCHED
+  NEEDS_CONFIRMATION
+  MANUAL_CONFIRMED
+  CONFLICTED
+  IGNORED
 }
 
 enum ContractStatus {
@@ -323,6 +334,10 @@ model Document {
   extractedJson        Json?
   contractNoDraft      String?
   batchNoDraft         String?
+  matchStatus          DocumentMatchStatus @default(UNMATCHED)
+  matchConfidence      Int              @default(0)
+  matchReason          String?
+  manualMatchLocked    Boolean          @default(false)
   isDeleted            Boolean          @default(false)
   deletedAt            DateTime?
   deletedBy            String?
@@ -341,12 +356,64 @@ model Document {
   aiLogs               AiLog[]
   sourceContracts      Contract[]
   sourceBatches        Batch[]
+  changeLogs           DocumentChangeLog[]
+  packageItem          DocumentPackageItem?
+  matchLogs            DocumentMatchLog[]
+}
+
+model DocumentPackageDraft {
+  id                   String                @id @default(cuid())
+  packageNo            String                @unique
+  contractNoDraft      String?
+  batchNoDraft         String?
+  customerName         String?
+  supplierName         String?
+  productName          String?
+  destinationWarehouse String?
+  status               String                @default("OPEN")
+  source               String                @default("SYSTEM")
+  matchSummary         String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  packageItems         DocumentPackageItem[]
+  matchLogs            DocumentMatchLog[]
+}
+
+model DocumentPackageItem {
+  id             String               @id @default(cuid())
+  packageDraftId String
+  documentId     String               @unique
+  assignmentType String               @default("AUTO")
+  note           String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  packageDraft   DocumentPackageDraft @relation(fields: [packageDraftId], references: [id])
+  document       Document             @relation(fields: [documentId], references: [id])
+
+  @@unique([packageDraftId, documentId])
+}
+
+model DocumentMatchLog {
+  id             String              @id @default(cuid())
+  documentId     String
+  packageDraftId String?
+  eventType      String
+  matchStatus    DocumentMatchStatus
+  confidence     Int                 @default(0)
+  reason         String?
+  detailJson     Json?
+  actorId        String?
+  actorName      String?
+  createdAt      DateTime            @default(now())
+  document       Document            @relation(fields: [documentId], references: [id])
+  packageDraft   DocumentPackageDraft? @relation(fields: [packageDraftId], references: [id])
 }
 
 model Contract {
   id                   String          @id @default(cuid())
   contractNo           String          @unique
-  contractType         String          @default("TRADE")
+  contractType         String          @default("PURCHASE")
+  parentContractId     String?
   customerId           String?
   customerName         String
   supplierId           String?
@@ -359,14 +426,42 @@ model Contract {
   currency             String
   destinationWarehouse String
   paymentStatus        String          @default("UNPAID")
+  executionStatus      String          @default("DOCUMENT_CONFIRMED")
+  executionProgress    Int             @default(0)
+  isOverdue            Boolean         @default(false)
+  overdueDays          Int             @default(0)
+  breachStatus         String          @default("NONE")
+  breachNote           String?
+  plannedReceiptAmount Float           @default(0)
+  actualReceiptAmount  Float           @default(0)
+  plannedPaymentAmount Float           @default(0)
+  actualPaymentAmount  Float           @default(0)
+  receiptPaymentPlanJson Json?
   status               ContractStatus  @default(DRAFT)
   sourceDocumentId     String?
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
   sourceDocument       Document?       @relation(fields: [sourceDocumentId], references: [id])
+  parentContract       Contract?       @relation("ContractSupplement", fields: [parentContractId], references: [id])
+  supplementalContracts Contract[]      @relation("ContractSupplement")
   batches              Batch[]
   payments             Payment[]
   stockMovements       StockMovement[]
+}
+
+model DocumentChangeLog {
+  id         String   @id @default(cuid())
+  documentId String
+  eventType  String
+  fieldName  String?
+  beforeJson Json?
+  afterJson  Json?
+  diffJson   Json?
+  reason     String?
+  actorId    String?
+  actorName  String?
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id])
 }
 
 model ContractItem {

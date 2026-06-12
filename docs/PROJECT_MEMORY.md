@@ -2368,15 +2368,306 @@
   - `Demo 1.5：成熟 ERP 模块包装` 的 `阶段 10 - 阶段 20`
   - `AI 助手真实流程现状问答补强`
   - `Demo 2.0：接近真实业务系统` 的 `阶段 21：基础主数据强化`
+- 2026-06-11 更新：
+  - 你已要求“更新一次 git 并开始做阶段 22”。
+  - 阶段 21 已提交并推送到 GitHub。
+  - 阶段 21 提交信息为：`ec75aee feat: 增加基础主数据中心`
+
+## 最近一次阶段 22：合同与单据业务化深化
+
+- 本次已完成 `Demo 2.0` 的第二个大环节：`阶段 22：合同与单据业务化深化`。
+- 本次核心原则继续保持：
+  - 合同数量、合同金额、执行进度可以展示业务计划和履约状态。
+  - 这些字段仍然不等于库存。
+  - 真实库存仍然只能由 `QrItem.status` 与 `StockMovement` 计算。
+- 本次数据库层新增和扩展：
+  - `DocumentType` 新增 `CERTIFICATE_OF_ORIGIN` 与 `CUSTOMS_ATTACHMENT`
+  - `Contract` 增加合同类型、父合同、执行进度、逾期、违约、收付款计划字段
+  - 新增 `DocumentChangeLog`，用于记录单据业务版本链和差异留痕
+- 本次后端新增能力：
+  - `GET /api/documents/package-status`
+  - `GET /api/documents/:id/change-logs`
+  - `POST /api/documents/:id/archive`
+  - 上传、AI 识别、人工修正、删除、作废、替换、归档、确认生成业务数据都会写入 `DocumentChangeLog`
+  - `POST /api/documents/:id/confirm` 会把合同、箱单、发票等不同单据关联到更合适的正式业务对象
+  - `GET /api/contracts` 与 `GET /api/contracts/:id` 已补齐合同类型、执行控制、收付款计划和单据包完整性
+- 本次前端新增能力：
+  - `合同与单据` 页面支持 6 类资料入口：合同、箱单、提单、发票、产地证、清关附件
+  - 单据列表增加留痕查看与归档操作
+  - 页面展示成熟 ERP 单据包完整性提醒
+  - `合同数据` 页面展示正式合同层信息、执行进度、逾期 / 违约状态、收付款计划对比、资料包完整性和合同层级关系
+- 本次重置规则再次校准：
+  - `POST /api/setup/reset-demo` 已恢复为空白演示起点
+  - 重置后 `Document / Contract / Batch / QrItem / StockMovement / WorkOrder` 等业务数据为 0
+  - 主数据、`DemoConfig`、运行时 AI 配置继续保留
+  - 标准演示图片仍从本地 `pics/` 手动上传识别
+- 本次自测结果：
+  - `npm run prisma:migrate --workspace @trade-ai-demo/server` 通过
+  - `npm run prisma:generate --workspace @trade-ai-demo/server` 通过
+  - `npx tsc -p apps/server/tsconfig.json --noEmit` 通过
+  - `npx tsc -p apps/web/tsconfig.json --noEmit` 通过
+  - `npm run build --workspace @trade-ai-demo/server` 通过
+  - `npm run build --workspace @trade-ai-demo/web` 通过
+  - `GET /api/health` 通过
+  - `GET /api/setup/status` 通过
+  - `GET /api/documents/package-status` 通过
+  - 临时端到端验证通过：上传标准合同与箱单 -> AI 识别 -> 确认生成业务数据 -> 合同执行字段与单据留痕可查
+  - 测试后已调用 `POST /api/setup/reset-demo` 恢复空白演示起点
+  - 已用内置浏览器打开 `http://127.0.0.1:5173/documents` 和 `http://127.0.0.1:5173/contracts` 做页面验收
+- 2026-06-11 补充设计：合同与单据环节需要支持 Excel / CSV 导入。
+  - 设计结论：
+    - 正式盖章合同正文仍优先是 `PDF / Word / 图片 / 扫描件`
+    - Excel / CSV 主要作为结构化明细导入，不替代盖章合同正文
+    - Excel 适合合同明细、箱单明细、发票明细、采购明细、批次明细、成本费用明细、回款计划等场景
+  - Excel 导入仍然必须走现有安全链路：
+    - 上传后先写入 `Document`
+    - 后端解析 Excel / CSV
+    - AI Mock 识别关键字段
+    - 结果保存到 `Document.extractedJson`
+    - 前端展示关键字段与明细行预览
+    - 人工修正
+    - 用户确认生成业务数据后，才写入正式 `Contract / ContractItem / Batch / PurchaseOrder / Receivable`
+  - Excel 识别后的 `Document.extractedJson` 后续建议包含：
+    - `sourceFormat`
+    - `sheets`
+    - `headerMap`
+    - `summaryFields`
+    - `lineItems`
+    - `warnings`
+  - 第一版边界：
+    - 优先支持标准模板 Excel / CSV
+    - 不先做复杂自由格式 Excel 语义理解
+    - 不先做复杂公式、跨 sheet 自动合并和完整字段映射配置
+    - Excel 导入绝不能直接改变库存
+    - 库存仍然只由 `QrItem.status` 与 `StockMovement` 决定
+  - 上传交互规则也已经固定：
+    - 上传区必须直接显示支持的文件格式
+    - 用户一眼就能看到哪些格式可传、哪些不可传
+    - 前端选中文件时先拦截错误格式
+    - 后端再做一次二次校验
+    - 非法格式必须给出清晰提示，不能模糊失败
+  - 本次只做设计增强与 TODO 拆分，尚未开发 Excel 解析代码。
 - 当前下一步：
-  - 等待你验证 `阶段 21：基础主数据强化`
-  - 你确认后，再提交本地 git 并 push GitHub
-  - 提交后进入 `阶段 22：合同与单据业务化深化`
-- 阶段 21 完成后：
+  - 先等待你确认是否按这个设计继续开发 `阶段 22 补充：Excel / CSV 导入与 AI Mock 识别实现`
+  - 如果你确认继续，我会在当前阶段 22 内补齐 Excel 上传、解析、AI Mock 识别、预览与人工修正
+  - Excel 补充实现完成并经你验证后，再提交本地 git 并 push GitHub
+  - 阶段 22 全部确认后，才进入 `阶段 23：多级二维码与仓储执行深化`
+- 阶段 22 完成后：
   - `Demo 2.0` 已经正式开始
-  - 后续严格从 `阶段 22` 继续，不跳阶段
-- 后续固定执行规则：
-  - 一次只做一个大环节
-  - 完成后先自测
-  - 先更新 `PROJECT_MEMORY.md` 与 `TODO.md`
-  - 再等你确认后提交 Git
+  - 后续严格从 `阶段 23` 继续，不跳阶段
+  - 后续固定执行规则：
+    - 一次只做一个大环节
+    - 完成后先自测
+    - 先更新 `PROJECT_MEMORY.md` 与 `TODO.md`
+    - 再等你确认后提交 Git
+
+## 最近一次阶段 22 补充：Excel / CSV 导入与上传格式界面提示真实实现
+
+- 2026-06-12 已按你的最新要求完成真实实现：上传格式支持和错误格式提示已经落到“合同与单据”页面本身，不只是写在文档里。
+- 本次实现仍然属于 `阶段 22：合同与单据业务化深化` 的补充，不进入 `阶段 23`。
+- 本次前端已实现：
+  - “合同与单据”上传区明确显示支持格式：
+    - 合同正文 / 扫描件：`PDF、Word、PNG、JPG、JPEG`
+    - 结构化明细：`XLSX、XLS、CSV`
+  - 上传区增加“不支持的格式会被拒绝”的醒目提示。
+  - 文件选择时先在前端校验后缀，不支持的文件不会进入上传流程。
+  - 替换新版本单据时也复用同一套格式限制。
+  - Excel / CSV 识别后，页面会显示 `Excel / CSV 明细预览`，包括来源格式、当前工作表、表头映射、解析提醒和明细行预览。
+  - 页面明确提示 Excel / CSV 解析结果只是草稿，不会直接增加库存。
+- 本次后端已实现：
+  - 支持 `.xlsx / .xls / .csv` 上传为 `Document`。
+  - 后端二次校验文件格式，即使绕过前端直接调接口，非法格式也会返回 400。
+  - Excel / CSV 解析结果会写入 `Document.extractedJson.spreadsheet`，包含：
+    - `sourceFormat`
+    - `sheets`
+    - `activeSheetName`
+    - `headerMap`
+    - `summaryFields`
+    - `lineItems`
+    - `previewRows`
+    - `warnings`
+  - AI Mock 会优先使用 Excel / CSV 中识别出的合同号、批次号、商品、客户、供应商、仓库、数量、单位、金额、币种等字段。
+  - 修复了 UTF-8 中文 CSV 表头被读成乱码的问题，中文表头如“合同号 / 批次号 / 商品名称 / 数量 / 单位”等可以被正确映射。
+  - Excel / CSV 导入仍然遵守原有安全链路：`Document -> extractedJson -> 人工修正 -> 用户确认生成业务数据`。
+  - Excel / CSV 不会直接创建库存；库存仍然只由后续 `QrItem.status` 和 `StockMovement` 决定。
+- 本次真实自测结果：
+  - `npx tsc -p apps/server/tsconfig.json --noEmit` 通过。
+  - `npx tsc -p apps/web/tsconfig.json --noEmit` 通过。
+  - `npm run build --workspace @trade-ai-demo/web` 通过，仅保留 Vite 大 chunk 提示。
+  - 停止运行中的 Demo 服务后，`npm run build --workspace @trade-ai-demo/server` 通过。
+  - 真实接口测试通过：
+    - 上传 `contract.xlsx` 为合同单据成功。
+    - 上传 `packing-list.csv` 为箱单单据成功。
+    - AI Mock 识别后，两份单据正确匹配为同一票业务：
+      - `CTR-EXCEL-202606-001`
+      - `BAT-EXCEL-202606-001`
+    - 确认生成业务数据成功，生成正式 `Contract / ContractItem / Batch / PurchaseOrder / Payment / Receivable`。
+    - 上传 `.json` 非法格式被后端拒绝，返回 400 和清晰错误提示。
+  - 浏览器页面检查通过：
+    - “合同与单据”页面能看到支持格式说明。
+    - 能看到不支持格式拒绝提示。
+    - Excel 识别后能看到 `Excel / CSV 明细预览`。
+  - 测试完成后已调用 `POST /api/setup/reset-demo`，当前演示业务数据已恢复为空白演示起点：
+    - `documents = 0`
+    - `contracts = 0`
+    - `batches = 0`
+    - `qrItems = 0`
+    - `stockMovements = 0`
+    - `purchaseOrders = 0`
+    - `shipments = 0`
+    - `workOrders = 0`
+- 依赖提醒：
+  - 本次为了 Demo 快速解析 Excel / CSV，引入了 `xlsx`。
+  - 该依赖适合当前 Demo 快速验证；正式版若要处理外部不可信文件，需要继续评估解析库安全、文件隔离解析、大小限制、病毒扫描和对象存储策略。
+- 当前下一步：
+  - 先等待你在页面验证阶段 22 补充实现。
+  - 你确认满意后，再执行本地 `git add / git commit / git push`。
+  - 阶段 22 提交完成后，才进入 `阶段 23：多级二维码与仓储执行深化`。
+
+## 最近一次阶段 22 补充：单据自动归票 / 同票识别设计固化
+
+- 2026-06-12 你已经明确要求：合同、箱单、发票、提单、产地证、清关附件等单据，后续不能只靠用户自己记住是否属于同一票业务。
+- 当前已固化的新设计原则：
+  - 单据上传后，先进入 `Document` 草稿层。
+  - AI 识别后，系统要自动做一次“同票 / 同批次归组判断”。
+  - 在正式 `Contract / Batch / PurchaseOrder / Receivable` 之前，增加一层“单据资料包草稿”。
+  - 该中间层第一版暂定为：
+    - `DocumentPackageDraft`
+    - `DocumentPackageItem`
+    - `DocumentMatchLog`
+- 已固定的成熟版业务口径：
+  - 同一合同，不一定等于同一批次。
+  - 同一批次，可以挂多份单据。
+  - 系统必须允许：
+    - `一个合同 -> 多个批次`
+    - `一个批次 -> 多份单据`
+    - `同一运输任务 -> 一个或多个批次`
+- 已固定的第一版归票优先级：
+  1. `contractNoDraft + batchNoDraft` 完全一致：
+     - 直接视为同一票、同一批次的高置信匹配。
+  2. 合同号一致但批次号缺失：
+     - 如果客户、供应商、商品、仓库、单位、数量等也基本一致，列为“高置信候选”，等待人工确认。
+  3. 发票、提单、产地证、清关附件：
+     - 如果识别到同样的合同号或批次号，可建议挂到已有资料包，但仍保留人工改挂能力。
+  4. 冲突规则：
+     - 合同号一致但批次号不同：
+       - 不能自动并入同一批次
+       - 只能提示“同合同下不同批次”
+     - 批次号一致但客户 / 供应商 / 仓库明显冲突：
+       - 标记为冲突待处理
+       - 禁止静默自动合并
+  5. 禁止规则：
+     - 不能只因文件名相似、日期接近、金额接近，就自动判为同一票正式业务。
+- 已固定的页面交互要求：
+  - 单据列表后续要展示：
+    - 归票状态
+    - 当前资料包
+    - 匹配置信度
+    - 匹配原因
+  - 单据详情后续要支持：
+    - 查看系统建议归入哪个资料包
+    - 查看候选资料包列表
+    - 查看冲突提示
+    - 人工确认归票
+    - 改挂到其他资料包
+    - 新建资料包
+    - 标记无关单据
+    - 取消人工锁定并重新匹配
+- 已固定的底线：
+  - 自动归票成功，不等于库存变化。
+  - 自动归票成功，不等于正式业务数据已生成。
+  - “确认生成业务数据”的门槛仍然是：同票资料包内必须具备 `合同 + 箱单`。
+  - 当前阶段要区分：
+    - 这是同一合同的新附件
+    - 这是同一合同下的新批次
+    - 这是完全另一票业务
+- 本次执行策略也已固定：
+  - 先做文档固化。
+  - 然后仍在 `阶段 22：合同与单据业务化深化` 内实现一版最小可落地代码。
+  - 不跳到阶段 23。
+  - 第一版代码目标是：
+    - 自动识别明显同票
+    - 展示候选与冲突
+    - 支持人工确认归票
+    - 不追求一次做完成熟版的复杂智能归票
+
+## 最近一次阶段 22 补充：单据自动归票 / 同票识别真实实现
+
+- 2026-06-12 已在阶段 22 内完成第一版真实代码实现，没有进入阶段 23。
+- 本次新增数据库层：
+  - `Document.matchStatus`
+  - `Document.matchConfidence`
+  - `Document.matchReason`
+  - `Document.manualMatchLocked`
+  - `DocumentPackageDraft`
+  - `DocumentPackageItem`
+  - `DocumentMatchLog`
+- 本次新增后端能力：
+  - AI Mock 识别完成后自动执行单据归票。
+  - 人工修正识别字段后，如果没有人工锁定归票结果，会自动重新归票。
+  - `GET /api/documents/packages` 查看资料包列表。
+  - `GET /api/documents/:id/match-candidates` 查看当前资料包、候选资料包、冲突候选和归票日志。
+  - `POST /api/documents/:id/match/confirm` 支持人工确认归票、改挂资料包、新建资料包、标记无关单据。
+  - `POST /api/documents/:id/match/rematch` 支持取消人工锁定并重新自动匹配。
+  - 删除草稿单据时，会从资料包中移除并写入归票日志。
+  - 重置空白演示起点时，会同步清理资料包、资料包明细和归票日志。
+- 本次归票规则已经落地：
+  - `contractNoDraft + batchNoDraft` 完全一致时自动高置信归入同一资料包。
+  - 合同号一致但批次号不同，不会静默合并，系统会按新批次创建资料包，并把原批次作为冲突候选提示。
+  - 合同号一致但批次号缺失时，可以作为候选，但需要人工确认。
+  - 如果同合同同批次但客户、供应商、商品或目的仓库冲突，会进入冲突待处理，不自动静默合并。
+  - 归票成功仍然只是草稿层关联，不会生成正式合同、批次、二维码或库存。
+- 本次正式业务生成门槛已经升级：
+  - 后端 `POST /api/documents/:id/confirm` 优先基于当前资料包检查是否具备 `合同 + 箱单`。
+  - 仍保留旧的 `contractNoDraft + batchNoDraft` 精确配对兜底。
+  - 无论是否归票成功，正式业务数据仍必须由用户点击“确认生成业务数据”后才创建。
+  - 库存仍然不会因为单据上传、识别、归票或确认生成合同批次而增加。
+- 本次前端已实现：
+  - `合同与单据` 列表新增归票状态、置信度和资料包展示。
+  - 单据详情新增“单据归票 / 同票识别”区域。
+  - 可查看当前资料包内已识别单据。
+  - 可查看候选资料包、冲突提示、匹配原因。
+  - 可人工确认当前资料包、确认归入候选资料包、新建资料包、标记无关、重新匹配。
+  - “确认生成业务数据”前端判断也优先读取当前资料包是否具备 `合同 + 箱单`。
+- 本次真实自测结果：
+  - `npm run prisma:migrate --workspace @trade-ai-demo/server` 通过，并已应用迁移 `20260612024000_stage22_document_auto_match`。
+  - `npm run prisma:generate --workspace @trade-ai-demo/server` 通过。
+  - `npx tsc -p apps/server/tsconfig.json --noEmit` 通过。
+  - `npx tsc -p apps/web/tsconfig.json --noEmit` 通过。
+  - `npm run build --workspace @trade-ai-demo/web` 通过，仅保留 Vite 大 chunk 提示。
+  - `npm run build --workspace @trade-ai-demo/server` 通过。
+  - 接口自测通过：上传 `contract.xlsx` + `packing-list.csv`，识别后自动归入同一资料包：
+    - `PKG-CTR-EXCEL-202606-001-BAT-EXCEL-202606-001`
+  - 接口自测通过：同合同不同批次 `BAT-EXCEL-202606-002` 不会并入原批次，会创建新资料包，并输出原批次冲突候选。
+  - 接口自测通过：人工确认归票、标记无关、重新匹配均可用。
+  - 接口自测通过：确认生成正式业务数据会创建 `Contract / Batch / PurchaseOrder / Payment / Receivable`，但 `QrItem = 0`、`StockMovement = 0`。
+  - 测试完成后已调用 `POST /api/setup/reset-demo`，系统恢复为空白演示起点：
+    - `documents = 0`
+    - `contracts = 0`
+    - `batches = 0`
+    - `qrItems = 0`
+    - `stockMovements = 0`
+    - `workOrders = 0`
+- 当前下一步：
+  - 先等待用户在页面验证阶段 22 的归票补充实现。
+  - 用户确认满意后，再执行本地 `git add / git commit / git push`。
+  - 阶段 22 提交完成后，才进入 `阶段 23：多级二维码与仓储执行深化`。
+
+## 最近一次状态更新：阶段 22 已获用户确认，可进入提交并开始阶段 23
+
+- 2026-06-12 你已经明确要求：`更新记忆 提交一次git 进行阶段23`。
+- 这意味着阶段 22「合同与单据业务化深化」及其 Excel / CSV、自动归票、同票识别补充能力，已经通过当前轮用户验收，可以执行正式提交。
+- 当前收口口径更新为：
+  - 阶段 22 不再处于“等待用户验证后再提交 Git”状态。
+  - 阶段 22 现在进入“提交并 push 到 GitHub”流程。
+  - 阶段 23 将作为下一唯一开发大环节启动，不与后续阶段并行。
+- 阶段 22 本次提交将覆盖的核心成果包括：
+  - 合同类型、执行进度、收付款计划、资料包完整性与单据留痕增强。
+  - Excel / CSV 上传、解析、AI Mock 识别、明细预览与人工修正。
+  - 单据自动归票、同票识别、候选包/冲突包判断、人工确认归票。
+  - 仍然严格保持“正式业务数据生成 != 库存生成”，库存只由后续二维码与出入库动作形成。
+- 阶段 23 启动前的统一原则继续有效：
+  - 只做一个大环节。
+  - 先开发并自测阶段 23。
+  - 更新 `docs/PROJECT_MEMORY.md` 与 `docs/TODO.md`。
+  - 先等你验证阶段 23 效果，再决定是否提交阶段 23 的 Git。

@@ -31,6 +31,7 @@ import {
   CheckCircleOutlined,
   DeleteOutlined,
   DeploymentUnitOutlined,
+  FileDoneOutlined,
   HistoryOutlined,
   InboxOutlined,
   ReloadOutlined,
@@ -42,14 +43,80 @@ import {
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL, requestJson, resolveApiUrl } from "../lib/api";
 
-type DocumentType = "CONTRACT" | "PACKING_LIST" | "BILL_OF_LADING" | "INVOICE" | "OTHER";
+type DocumentType =
+  | "CONTRACT"
+  | "PACKING_LIST"
+  | "BILL_OF_LADING"
+  | "INVOICE"
+  | "CERTIFICATE_OF_ORIGIN"
+  | "CUSTOMS_ATTACHMENT"
+  | "OTHER";
 type DocumentAiStatus = "PENDING" | "EXTRACTED" | "FAILED";
 type DocumentStatus = "ACTIVE" | "VOIDED" | "REPLACED" | "ARCHIVED" | "DELETED";
+type DocumentMatchStatus =
+  | "UNMATCHED"
+  | "AUTO_MATCHED"
+  | "NEEDS_CONFIRMATION"
+  | "MANUAL_CONFIRMED"
+  | "CONFLICTED"
+  | "IGNORED";
+
+type DocumentPackageDraftItem = {
+  id: string;
+  assignmentType: string;
+  note: string | null;
+  createdAt: string;
+  document: {
+    id: string;
+    documentType: DocumentType;
+    originalName: string | null;
+    fileName: string;
+    status: DocumentStatus;
+    aiStatus: DocumentAiStatus;
+    contractNoDraft: string | null;
+    batchNoDraft: string | null;
+    matchStatus: DocumentMatchStatus;
+    matchConfidence: number;
+    matchReason: string | null;
+    manualMatchLocked: boolean;
+    businessCreated: boolean;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+};
+
+type DocumentPackageDraft = {
+  id: string;
+  packageNo: string;
+  contractNoDraft: string | null;
+  batchNoDraft: string | null;
+  customerName: string | null;
+  supplierName: string | null;
+  productName: string | null;
+  destinationWarehouse: string | null;
+  status: string;
+  source: string;
+  matchSummary: string | null;
+  createdAt: string;
+  updatedAt: string;
+  packageItems?: DocumentPackageDraftItem[];
+};
+
+type DocumentPackageItemSummary = {
+  id: string;
+  assignmentType: string;
+  note: string | null;
+  packageDraft: DocumentPackageDraft;
+};
 
 type DocumentContractSummary = {
   id: string;
   contractNo: string;
+  contractType: string;
   status: string;
+  executionStatus: string;
+  executionProgress: number;
   productName: string;
   totalQuantity: number;
   unit: string;
@@ -94,6 +161,10 @@ type DocumentRecord = {
   extractedJson: Record<string, unknown> | null;
   contractNoDraft: string | null;
   batchNoDraft: string | null;
+  matchStatus: DocumentMatchStatus;
+  matchConfidence: number;
+  matchReason: string | null;
+  manualMatchLocked: boolean;
   isDeleted: boolean;
   deletedAt: string | null;
   deletedBy: string | null;
@@ -110,6 +181,7 @@ type DocumentRecord = {
   replacedByDocument: DocumentReplacementSummary | null;
   sourceContracts: DocumentContractSummary[];
   sourceBatches: DocumentBatchSummary[];
+  packageItem: DocumentPackageItemSummary | null;
 };
 
 type ExtractionFormValues = {
@@ -132,7 +204,10 @@ type ConfirmBusinessDataResponse = {
   contract: {
     id: string;
     contractNo: string;
+    contractType: string;
     status: string;
+    executionStatus: string;
+    executionProgress: number;
     customerName: string;
     supplierName: string;
     productName: string;
@@ -198,6 +273,56 @@ type DocumentReplaceResponse = {
   previousDocument: DocumentRecord | null;
 };
 
+type DocumentChangeLog = {
+  id: string;
+  documentId: string;
+  eventType: string;
+  fieldName: string | null;
+  beforeJson: Record<string, unknown> | null;
+  afterJson: Record<string, unknown> | null;
+  diffJson: {
+    changedFields?: Array<{
+      field: string;
+      before: unknown;
+      after: unknown;
+    }>;
+    changedFieldCount?: number;
+    [key: string]: unknown;
+  } | null;
+  reason: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: string;
+};
+
+type DocumentMatchLog = {
+  id: string;
+  documentId: string;
+  packageDraftId: string | null;
+  eventType: string;
+  matchStatus: DocumentMatchStatus;
+  confidence: number;
+  reason: string | null;
+  detailJson: Record<string, unknown> | null;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: string;
+};
+
+type DocumentPackageCandidate = {
+  packageDraft: DocumentPackageDraft;
+  status: "EXACT" | "HIGH_CONFIDENCE" | "CONFLICT" | "LOW_CONFIDENCE";
+  confidence: number;
+  reason: string;
+};
+
+type DocumentMatchInfoResponse = {
+  document: DocumentRecord;
+  currentPackage: DocumentPackageDraft | null;
+  candidates: DocumentPackageCandidate[];
+  logs: DocumentMatchLog[];
+};
+
 type DemoScenarioSummary = {
   scenarioName: string;
   origin: string;
@@ -259,13 +384,46 @@ type BusinessDocumentGate = {
   message: string;
 };
 
+type SpreadsheetExtraction = {
+  sourceFormat?: string;
+  sheets?: Array<{
+    name: string;
+    rowCount: number;
+    columnCount: number;
+  }>;
+  activeSheetName?: string | null;
+  headerMap?: Record<string, unknown>;
+  summaryFields?: Record<string, unknown>;
+  lineItems?: Array<Record<string, unknown>>;
+  previewRows?: Array<Record<string, unknown>>;
+  warnings?: string[];
+};
+
 const DEFAULT_RESET_CONFIRMATION_PHRASE = "我是最高权限用户";
+const supportedDocumentExtensions = [".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg", ".xlsx", ".xls", ".csv"];
+const supportedUploadAccept = supportedDocumentExtensions.join(",");
+const unsupportedFileTypeMessage = "上传文件格式不支持，请上传 PDF、Word、图片或 Excel/CSV 文件。";
+
+const supportedFormatGroups = [
+  {
+    title: "合同正文 / 扫描件",
+    formats: "PDF、Word、PNG、JPG、JPEG",
+    note: "适合盖章合同、扫描件、图片单据"
+  },
+  {
+    title: "结构化明细",
+    formats: "XLSX、XLS、CSV",
+    note: "适合合同明细、箱单、发票明细"
+  }
+];
 
 const documentTypeOptions: Array<{ label: string; value: DocumentType }> = [
   { label: "合同", value: "CONTRACT" },
   { label: "箱单", value: "PACKING_LIST" },
   { label: "提单", value: "BILL_OF_LADING" },
   { label: "发票", value: "INVOICE" },
+  { label: "产地证", value: "CERTIFICATE_OF_ORIGIN" },
+  { label: "清关附件", value: "CUSTOMS_ATTACHMENT" },
   { label: "其他", value: "OTHER" }
 ];
 
@@ -274,7 +432,30 @@ const documentTypeLabelMap: Record<DocumentType, string> = {
   PACKING_LIST: "箱单",
   BILL_OF_LADING: "提单",
   INVOICE: "发票",
+  CERTIFICATE_OF_ORIGIN: "产地证",
+  CUSTOMS_ATTACHMENT: "清关附件",
   OTHER: "其他"
+};
+
+const documentChangeEventLabelMap: Record<string, string> = {
+  UPLOAD: "上传",
+  AI_EXTRACT: "AI识别",
+  FIELD_CORRECTION: "人工修正",
+  BUSINESS_CREATE: "确认生成业务",
+  BUSINESS_CREATE_RECHECK: "业务状态补齐",
+  DELETE: "删除",
+  VOID: "作废",
+  REPLACE: "替换旧版本",
+  CREATE_REPLACEMENT: "生成新版本",
+  ARCHIVE: "归档"
+};
+
+const contractTypeLabelMap: Record<string, string> = {
+  PURCHASE: "采购合同",
+  SALES: "销售合同",
+  INTER_COMPANY: "公司间协议",
+  SUPPLEMENTAL: "补充协议",
+  TRADE: "综合贸易合同"
 };
 
 const aiStatusConfig: Record<DocumentAiStatus, { label: string; color: string }> = {
@@ -289,6 +470,25 @@ const documentStatusConfig: Record<DocumentStatus, { label: string; color: strin
   REPLACED: { label: "已替换", color: "default" },
   ARCHIVED: { label: "已归档", color: "warning" },
   DELETED: { label: "已删除", color: "default" }
+};
+
+const matchStatusConfig: Record<DocumentMatchStatus, { label: string; color: string }> = {
+  UNMATCHED: { label: "未归组", color: "default" },
+  AUTO_MATCHED: { label: "自动归组", color: "success" },
+  NEEDS_CONFIRMATION: { label: "待人工确认", color: "warning" },
+  MANUAL_CONFIRMED: { label: "人工确认", color: "processing" },
+  CONFLICTED: { label: "冲突待处理", color: "error" },
+  IGNORED: { label: "已忽略", color: "default" }
+};
+
+const packageCandidateStatusConfig: Record<
+  DocumentPackageCandidate["status"],
+  { label: string; color: string }
+> = {
+  EXACT: { label: "精确匹配", color: "success" },
+  HIGH_CONFIDENCE: { label: "高置信候选", color: "processing" },
+  LOW_CONFIDENCE: { label: "低置信候选", color: "warning" },
+  CONFLICT: { label: "冲突候选", color: "error" }
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -323,6 +523,70 @@ function formatAmount(amount?: number | null, currency?: string | null) {
   }
 
   return `${amount.toLocaleString("zh-CN")} ${currency ?? ""}`.trim();
+}
+
+function formatChangeValue(value: unknown) {
+  if (value === null || typeof value === "undefined") {
+    return "-";
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return JSON.stringify(value);
+}
+
+function getFileExtension(fileName: string) {
+  const dotIndex = fileName.lastIndexOf(".");
+  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : "";
+}
+
+function validateDocumentUploadFile(file: File) {
+  const extension = getFileExtension(file.name);
+
+  if (!supportedDocumentExtensions.includes(extension)) {
+    message.error(unsupportedFileTypeMessage);
+    return false;
+  }
+
+  return true;
+}
+
+function readObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function readSpreadsheetExtraction(document: DocumentRecord | null): SpreadsheetExtraction | null {
+  const extracted = readObject(document?.extractedJson);
+  const spreadsheet = readObject(extracted?.spreadsheet);
+
+  if (!spreadsheet) {
+    return null;
+  }
+
+  return spreadsheet as SpreadsheetExtraction;
+}
+
+function buildSpreadsheetPreviewColumns(rows: Array<Record<string, unknown>>): ColumnsType<Record<string, unknown>> {
+  const columnKeys = Array.from(
+    rows.reduce((keys, row) => {
+      Object.keys(row).forEach((key) => keys.add(key));
+      return keys;
+    }, new Set<string>())
+  ).slice(0, 8);
+
+  return columnKeys.map((key) => ({
+    title: key,
+    dataIndex: key,
+    key,
+    ellipsis: true,
+    render: (value: unknown) => formatChangeValue(value)
+  }));
 }
 
 function toExtractionValues(document: DocumentRecord | null): ExtractionFormValues {
@@ -390,6 +654,10 @@ function canVoidDocument(document: DocumentRecord) {
 }
 
 function canReplaceDocument(document: DocumentRecord) {
+  return document.status === "ACTIVE" && document.businessCreated;
+}
+
+function canArchiveDocument(document: DocumentRecord) {
   return document.status === "ACTIVE" && document.businessCreated;
 }
 
@@ -466,10 +734,59 @@ function getDocumentDraftPairKey(document: DocumentRecord) {
   return `${contractNoDraft}::${batchNoDraft}`;
 }
 
+function getActivePackageDocuments(packageDraft: DocumentPackageDraft | null | undefined) {
+  return (
+    packageDraft?.packageItems
+      ?.map((item) => item.document)
+      .filter((item) => item.status === "ACTIVE" && item.aiStatus === "EXTRACTED") ?? []
+  );
+}
+
+function getBusinessDocumentGateForPackage(
+  packageDraft: DocumentPackageDraft | null | undefined
+): BusinessDocumentGate | null {
+  if (!packageDraft?.packageItems?.length) {
+    return null;
+  }
+
+  const packageDocuments = getActivePackageDocuments(packageDraft);
+  const hasContract = packageDocuments.some((item) => item.documentType === "CONTRACT");
+  const hasPackingList = packageDocuments.some((item) => item.documentType === "PACKING_LIST");
+
+  if (hasContract && hasPackingList) {
+    return {
+      pairKey: packageDraft.packageNo,
+      hasContract: true,
+      hasPackingList: true,
+      isReady: true,
+      message: "当前资料包内已具备已识别的合同和箱单，可以确认生成正式业务数据。"
+    };
+  }
+
+  const missingParts = [
+    hasContract ? null : "合同",
+    hasPackingList ? null : "箱单"
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    pairKey: packageDraft.packageNo,
+    hasContract,
+    hasPackingList,
+    isReady: false,
+    message: `当前资料包缺少已识别的${missingParts.join(" + ")}，暂不能生成正式业务数据。`
+  };
+}
+
 function getBusinessDocumentGateForDocument(
   documents: DocumentRecord[],
   document: DocumentRecord
 ): BusinessDocumentGate {
+  const packageGate = getBusinessDocumentGateForPackage(document.packageItem?.packageDraft);
+
+  if (packageGate) {
+    return packageGate;
+  }
+
   const pairKey = getDocumentDraftPairKey(document);
 
   if (!pairKey) {
@@ -516,6 +833,20 @@ function getBusinessDocumentGateForDocument(
   };
 }
 
+function renderMatchStatusTag(status: DocumentMatchStatus) {
+  const config = matchStatusConfig[status];
+
+  return <Tag color={config.color}>{config.label}</Tag>;
+}
+
+function getPackageDisplayName(packageDraft: DocumentPackageDraft | null | undefined) {
+  if (!packageDraft) {
+    return "未归入资料包";
+  }
+
+  return `${packageDraft.packageNo}${packageDraft.batchNoDraft ? ` · ${packageDraft.batchNoDraft}` : ""}`;
+}
+
 function hasAnyReadyBusinessDocumentPair(documents: DocumentRecord[]) {
   const seenPairs = new Set<string>();
 
@@ -554,6 +885,8 @@ export function DocumentsPage() {
   const [isVoiding, setIsVoiding] = useState(false);
   const [isReplacing, setIsReplacing] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isChangeLogLoading, setIsChangeLogLoading] = useState(false);
+  const [archivingDocumentId, setArchivingDocumentId] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [uploadType, setUploadType] = useState<DocumentType>("CONTRACT");
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -565,6 +898,11 @@ export function DocumentsPage() {
   const [replaceFileList, setReplaceFileList] = useState<UploadFile[]>([]);
   const [historyTarget, setHistoryTarget] = useState<DocumentRecord | null>(null);
   const [historyDocuments, setHistoryDocuments] = useState<DocumentRecord[]>([]);
+  const [changeLogTarget, setChangeLogTarget] = useState<DocumentRecord | null>(null);
+  const [changeLogs, setChangeLogs] = useState<DocumentChangeLog[]>([]);
+  const [matchInfo, setMatchInfo] = useState<DocumentMatchInfoResponse | null>(null);
+  const [isMatchInfoLoading, setIsMatchInfoLoading] = useState(false);
+  const [matchingAction, setMatchingAction] = useState<string | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [highestPrivilegeConfirmed, setHighestPrivilegeConfirmed] = useState(false);
   const [resetConfirmationText, setResetConfirmationText] = useState("");
@@ -573,6 +911,12 @@ export function DocumentsPage() {
     () => documents.find((item) => item.id === selectedDocumentId) ?? null,
     [documents, selectedDocumentId]
   );
+  const selectedSpreadsheetExtraction = readSpreadsheetExtraction(selectedDocument);
+  const selectedSpreadsheetRows =
+    selectedSpreadsheetExtraction?.previewRows?.length
+      ? selectedSpreadsheetExtraction.previewRows
+      : selectedSpreadsheetExtraction?.lineItems?.slice(0, 10) ?? [];
+  const selectedSpreadsheetColumns = buildSpreadsheetPreviewColumns(selectedSpreadsheetRows);
 
   const selectedBusinessResult =
     latestBusinessResult?.document?.id === selectedDocument?.id ? latestBusinessResult : null;
@@ -585,9 +929,14 @@ export function DocumentsPage() {
   const packingListPreparedStatus = getPreparedStatus(activeDocuments, "PACKING_LIST");
   const billOfLadingPreparedStatus = getPreparedStatus(activeDocuments, "BILL_OF_LADING");
   const invoicePreparedStatus = getPreparedStatus(activeDocuments, "INVOICE");
+  const certificatePreparedStatus = getPreparedStatus(activeDocuments, "CERTIFICATE_OF_ORIGIN");
+  const customsAttachmentPreparedStatus = getPreparedStatus(activeDocuments, "CUSTOMS_ATTACHMENT");
   const hasMinimumBusinessDocuments = hasAnyReadyBusinessDocumentPair(activeDocuments);
+  const activeMatchInfo = matchInfo && matchInfo.document.id === selectedDocument?.id ? matchInfo : null;
+  const selectedCurrentPackage = activeMatchInfo?.currentPackage ?? selectedDocument?.packageItem?.packageDraft ?? null;
   const selectedDocumentBusinessGate = selectedDocument
-    ? getBusinessDocumentGateForDocument(activeDocuments, selectedDocument)
+    ? getBusinessDocumentGateForPackage(selectedCurrentPackage) ??
+      getBusinessDocumentGateForDocument(activeDocuments, selectedDocument)
     : null;
   const matureDocumentSteps = [
     {
@@ -622,6 +971,19 @@ export function DocumentsPage() {
         invoicePreparedStatus === "recognized"
           ? "当前已识别发票；成熟版清关时通常还会结合箱单、提单和其他资料做一致性校验。"
           : "成熟版通常会在清关前补齐发票，并与箱单、提单、其他资料一起校验。"
+    },
+    {
+      title: "清关资料包补齐",
+      status:
+        certificatePreparedStatus === "recognized" && customsAttachmentPreparedStatus === "recognized"
+          ? "finish"
+          : invoicePreparedStatus === "recognized" || billOfLadingPreparedStatus === "recognized"
+            ? "process"
+            : "wait",
+      description:
+        certificatePreparedStatus === "recognized" || customsAttachmentPreparedStatus === "recognized"
+          ? "当前已开始补充产地证或清关附件；成熟版会把这些资料纳入清关资料包完整性校验。"
+          : "正式业务中常见还需要产地证、目的国清关附件、查验补充资料等。Demo 先做资料包口径展示。"
     },
     {
       title: "库存真正生效",
@@ -674,6 +1036,26 @@ export function DocumentsPage() {
     }
   }
 
+  async function loadMatchInfo(documentId: string) {
+    setIsMatchInfoLoading(true);
+
+    try {
+      const nextMatchInfo = await requestJson<DocumentMatchInfoResponse>(
+        `/api/documents/${documentId}/match-candidates`
+      );
+      setMatchInfo(nextMatchInfo);
+
+      if (nextMatchInfo.document) {
+        upsertDocument(nextMatchInfo.document);
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载单据归票信息失败。");
+      setMatchInfo(null);
+    } finally {
+      setIsMatchInfoLoading(false);
+    }
+  }
+
   function upsertDocument(document: DocumentRecord) {
     setDocuments((current) => {
       const exists = current.some((item) => item.id === document.id);
@@ -694,6 +1076,10 @@ export function DocumentsPage() {
   }
 
   async function handleUpload(file: File) {
+    if (!validateDocumentUploadFile(file)) {
+      return;
+    }
+
     setIsUploading(true);
 
     try {
@@ -763,6 +1149,127 @@ export function DocumentsPage() {
       message.error(error instanceof Error ? error.message : "保存失败。");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleConfirmDocumentPackage(packageDraftId?: string) {
+    if (!selectedDocument) {
+      return;
+    }
+
+    setMatchingAction(`confirm:${packageDraftId ?? "current"}`);
+
+    try {
+      const result = await requestJson<DocumentMatchInfoResponse>(
+        `/api/documents/${selectedDocument.id}/match/confirm`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            packageDraftId: packageDraftId ?? selectedCurrentPackage?.id,
+            reason: "人工确认该单据属于当前资料包。"
+          })
+        }
+      );
+
+      upsertDocument(result.document);
+      setMatchInfo(result);
+      message.success("单据归票结果已人工确认。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "人工确认归票失败。");
+    } finally {
+      setMatchingAction(null);
+    }
+  }
+
+  async function handleCreateDocumentPackage() {
+    if (!selectedDocument) {
+      return;
+    }
+
+    setMatchingAction("create-package");
+
+    try {
+      const result = await requestJson<DocumentMatchInfoResponse>(
+        `/api/documents/${selectedDocument.id}/match/confirm`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            createNew: true,
+            reason: "人工新建资料包并确认该单据归入。"
+          })
+        }
+      );
+
+      upsertDocument(result.document);
+      setMatchInfo(result);
+      message.success("已新建资料包并完成归票。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "新建资料包失败。");
+    } finally {
+      setMatchingAction(null);
+    }
+  }
+
+  async function handleIgnoreDocumentMatch() {
+    if (!selectedDocument) {
+      return;
+    }
+
+    setMatchingAction("ignore");
+
+    try {
+      const result = await requestJson<DocumentMatchInfoResponse>(
+        `/api/documents/${selectedDocument.id}/match/confirm`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            ignore: true,
+            reason: "人工标记该单据暂不参与当前业务资料包。"
+          })
+        }
+      );
+
+      upsertDocument(result.document);
+      setMatchInfo(result);
+      message.success("该单据已标记为无关单据。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "标记无关失败。");
+    } finally {
+      setMatchingAction(null);
+    }
+  }
+
+  async function handleRematchDocument() {
+    if (!selectedDocument) {
+      return;
+    }
+
+    setMatchingAction("rematch");
+
+    try {
+      const result = await requestJson<DocumentMatchInfoResponse>(
+        `/api/documents/${selectedDocument.id}/match/rematch`,
+        {
+          method: "POST"
+        }
+      );
+
+      upsertDocument(result.document);
+      setMatchInfo(result);
+      message.success("已重新执行自动归票。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "重新归票失败。");
+    } finally {
+      setMatchingAction(null);
     }
   }
 
@@ -891,6 +1398,10 @@ export function DocumentsPage() {
       return;
     }
 
+    if (!validateDocumentUploadFile(file)) {
+      return;
+    }
+
     setIsReplacing(true);
 
     try {
@@ -943,6 +1454,51 @@ export function DocumentsPage() {
     }
   }
 
+  async function openChangeLogModal(document: DocumentRecord) {
+    setChangeLogTarget(document);
+    setIsChangeLogLoading(true);
+
+    try {
+      const logs = await requestJson<DocumentChangeLog[]>(`/api/documents/${document.id}/change-logs`);
+      setChangeLogs(logs);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载变更留痕失败。");
+      setChangeLogs([]);
+    } finally {
+      setIsChangeLogLoading(false);
+    }
+  }
+
+  function handleArchiveDocument(document: DocumentRecord) {
+    Modal.confirm({
+      title: "归档单据",
+      content:
+        "归档不会删除文件、合同、批次、二维码或库存流水，只会把这份单据标记为归档留存。归档后不能再继续编辑、作废或替换。",
+      okText: "确认归档",
+      cancelText: "取消",
+      onOk: async () => {
+        setArchivingDocumentId(document.id);
+
+        try {
+          const result = await requestJson<DocumentMutationResponse>(`/api/documents/${document.id}/archive`, {
+            method: "POST"
+          });
+
+          if (result.document) {
+            upsertDocument(result.document);
+          }
+
+          setLatestBusinessResult(null);
+          message.success("单据已归档。");
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : "归档失败。");
+        } finally {
+          setArchivingDocumentId(null);
+        }
+      }
+    });
+  }
+
   async function handleResetDemoEnvironment() {
     if (!isResetConfirmationValid) {
       message.warning(`请先勾选最高权限确认，并输入“${resetConfirmationPhrase}”。`);
@@ -971,6 +1527,9 @@ export function DocumentsPage() {
       setReplaceFileList([]);
       setHistoryTarget(null);
       setHistoryDocuments([]);
+      setChangeLogTarget(null);
+      setChangeLogs([]);
+      setMatchInfo(null);
       setIsResetModalOpen(false);
       setHighestPrivilegeConfirmed(false);
       setResetConfirmationText("");
@@ -993,6 +1552,15 @@ export function DocumentsPage() {
     void loadDocuments();
     void loadSetupStatus();
   }, []);
+
+  useEffect(() => {
+    if (!selectedDocument || selectedDocument.aiStatus !== "EXTRACTED") {
+      setMatchInfo(null);
+      return;
+    }
+
+    void loadMatchInfo(selectedDocument.id);
+  }, [selectedDocument?.id, selectedDocument?.aiStatus, selectedDocument?.updatedAt]);
 
   useEffect(() => {
     form.setFieldsValue(toExtractionValues(selectedDocument));
@@ -1043,6 +1611,31 @@ export function DocumentsPage() {
       render: (_, record) => getBusinessStatusTag(record)
     },
     {
+      title: "归票状态",
+      key: "matchStatus",
+      width: 150,
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          {renderMatchStatusTag(record.matchStatus)}
+          {record.matchConfidence > 0 ? (
+            <Typography.Text type="secondary">{record.matchConfidence}%</Typography.Text>
+          ) : null}
+        </Space>
+      )
+    },
+    {
+      title: "资料包",
+      key: "packageDraft",
+      width: 240,
+      render: (_, record) => (
+        <Typography.Text className="documents-secondary-text">
+          {record.packageItem?.packageDraft
+            ? getPackageDisplayName(record.packageItem.packageDraft)
+            : "未归入资料包"}
+        </Typography.Text>
+      )
+    },
+    {
       title: "合同草稿",
       dataIndex: "contractNoDraft",
       width: 180,
@@ -1085,6 +1678,17 @@ export function DocumentsPage() {
               查看历史
             </Button>
           ) : null}
+
+          <Button
+            size="small"
+            icon={<HistoryOutlined />}
+            onClick={(event) => {
+              event.stopPropagation();
+              void openChangeLogModal(record);
+            }}
+          >
+            留痕
+          </Button>
 
           {canReExtractDocument(record) ? (
             <Button
@@ -1158,6 +1762,20 @@ export function DocumentsPage() {
             </Button>
           ) : null}
 
+          {canArchiveDocument(record) ? (
+            <Button
+              size="small"
+              icon={<FileDoneOutlined />}
+              loading={archivingDocumentId === record.id}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleArchiveDocument(record);
+              }}
+            >
+              归档
+            </Button>
+          ) : null}
+
           {record.fileUrl ? (
             <Button
               size="small"
@@ -1180,13 +1798,20 @@ export function DocumentsPage() {
   const generatedBatch = selectedDocument?.sourceBatches[0] ?? null;
   const isBusinessGenerated = selectedDocument ? getBusinessStatus(selectedDocument) : false;
   const isDraftEditable = selectedDocument ? canEditDraft(selectedDocument) : false;
+  const selectedMatchCandidates = activeMatchInfo?.candidates ?? [];
+  const selectedMatchLogs = activeMatchInfo?.logs ?? [];
+  const selectedPackageDocuments = getActivePackageDocuments(selectedCurrentPackage);
 
   const generatedItems: DescriptionsProps["items"] = [
     generatedContract
       ? {
           key: "contract",
           label: "正式合同",
-          children: `${generatedContract.contractNo} · ${generatedContract.totalQuantity}${generatedContract.unit} · ${formatAmount(generatedContract.amount, generatedContract.currency)}`
+          children: `${generatedContract.contractNo} · ${
+            contractTypeLabelMap[generatedContract.contractType] ?? generatedContract.contractType
+          } · 执行进度 ${generatedContract.executionProgress}% · ${generatedContract.totalQuantity}${
+            generatedContract.unit
+          } · ${formatAmount(generatedContract.amount, generatedContract.currency)}`
         }
       : null,
     generatedBatch
@@ -1231,11 +1856,21 @@ export function DocumentsPage() {
             <Space direction="vertical" size="large" style={{ width: "100%" }}>
               <div>
                 <Typography.Title level={4} style={{ marginBottom: 8 }}>
-                  上传合同 / 箱单
+                  上传合同 / 单据
                 </Typography.Title>
                 <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                  先选择单据类型，再上传文件。当前阶段只会把原始文件和识别草稿写入数据库，不会直接形成库存。
+                  先选择单据类型，再上传文件。系统会先校验文件格式；格式不支持时不会进入上传和 AI Mock 识别。
                 </Typography.Paragraph>
+              </div>
+
+              <div className="documents-format-hints">
+                {supportedFormatGroups.map((group) => (
+                  <div className="documents-format-row" key={group.title}>
+                    <Typography.Text strong>{group.title}</Typography.Text>
+                    <Typography.Text>{group.formats}</Typography.Text>
+                    <Typography.Text type="secondary">{group.note}</Typography.Text>
+                  </div>
+                ))}
               </div>
 
               <Radio.Group
@@ -1247,6 +1882,7 @@ export function DocumentsPage() {
               />
 
               <Upload
+                accept={supportedUploadAccept}
                 multiple={false}
                 showUploadList={false}
                 beforeUpload={(file) => {
@@ -1260,10 +1896,17 @@ export function DocumentsPage() {
                     {isUploading ? "正在上传单据..." : `点击上传${documentTypeLabelMap[uploadType]}`}
                   </Typography.Title>
                   <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                    第一版先保存原文件与元数据，随后通过 AI Mock 生成可编辑识别草稿。
+                    支持 PDF / Word / 图片 / Excel / CSV。Excel 明细会解析为表格草稿，库存不会因此增加。
                   </Typography.Paragraph>
                 </div>
               </Upload>
+
+              <Alert
+                type="warning"
+                showIcon
+                message="不支持的格式会被拒绝"
+                description={unsupportedFileTypeMessage}
+              />
 
               <Alert
                 type="info"
@@ -1279,6 +1922,8 @@ export function DocumentsPage() {
                     {renderPreparedStatusTag("箱单", packingListPreparedStatus)}
                     {renderPreparedStatusTag("提单", billOfLadingPreparedStatus)}
                     {renderPreparedStatusTag("发票", invoicePreparedStatus)}
+                    {renderPreparedStatusTag("产地证", certificatePreparedStatus)}
+                    {renderPreparedStatusTag("清关附件", customsAttachmentPreparedStatus)}
                   </Space>
 
                   <Alert
@@ -1419,7 +2064,7 @@ export function DocumentsPage() {
               columns={columns}
               dataSource={documents}
               pagination={{ pageSize: 6, hideOnSinglePage: true }}
-              scroll={{ x: 1580 }}
+              scroll={{ x: 1980 }}
               rowClassName={(record) =>
                 record.id === selectedDocumentId ? "documents-table-row-selected" : ""
               }
@@ -1532,6 +2177,20 @@ export function DocumentsPage() {
                     </Button>
                   ) : null}
 
+                  <Button icon={<HistoryOutlined />} onClick={() => void openChangeLogModal(selectedDocument)}>
+                    查看变更留痕
+                  </Button>
+
+                  {canArchiveDocument(selectedDocument) ? (
+                    <Button
+                      icon={<FileDoneOutlined />}
+                      loading={archivingDocumentId === selectedDocument.id}
+                      onClick={() => handleArchiveDocument(selectedDocument)}
+                    >
+                      归档单据
+                    </Button>
+                  ) : null}
+
                   {selectedDocument.status === "REPLACED" ? (
                     <>
                       <Button
@@ -1576,6 +2235,15 @@ export function DocumentsPage() {
                   />
                 ) : null}
 
+                {selectedDocument.status === "ARCHIVED" ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="这份单据已经归档"
+                    description="归档只代表文件与业务依据进入留存状态，不会删除合同、批次、二维码或库存流水。"
+                  />
+                ) : null}
+
                 {selectedDocument.aiStatus !== "EXTRACTED" && selectedDocument.status === "ACTIVE" ? (
                   <Alert
                     type="warning"
@@ -1609,6 +2277,272 @@ export function DocumentsPage() {
                     message="正式业务数据已生成，草稿已锁定"
                     description="这份单据已经生成正式合同、批次、采购草稿和应收草稿。后续若需失效处理，只能作废或替换，不能误删，也不会改变库存。"
                   />
+                ) : null}
+
+                {selectedDocument.aiStatus === "EXTRACTED" ? (
+                  <Card
+                    className="placeholder-card document-match-card"
+                    size="small"
+                    title="单据归票 / 同票识别"
+                    loading={isMatchInfoLoading}
+                    extra={
+                      <Button
+                        size="small"
+                        icon={<ReloadOutlined />}
+                        loading={matchingAction === "rematch"}
+                        disabled={selectedDocument.businessCreated || selectedDocument.status !== "ACTIVE"}
+                        onClick={() => void handleRematchDocument()}
+                      >
+                        重新匹配
+                      </Button>
+                    }
+                  >
+                    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                      <Alert
+                        type={
+                          selectedDocument.matchStatus === "CONFLICTED"
+                            ? "error"
+                            : selectedDocument.matchStatus === "NEEDS_CONFIRMATION"
+                              ? "warning"
+                              : "info"
+                        }
+                        showIcon
+                        message={
+                          selectedDocument.matchStatus === "AUTO_MATCHED" ||
+                          selectedDocument.matchStatus === "MANUAL_CONFIRMED"
+                            ? "系统已经把该单据归入资料包"
+                            : selectedDocument.matchStatus === "NEEDS_CONFIRMATION"
+                              ? "系统找到候选资料包，需要人工确认"
+                              : selectedDocument.matchStatus === "CONFLICTED"
+                                ? "存在冲突候选，请人工处理"
+                                : selectedDocument.matchStatus === "IGNORED"
+                                  ? "该单据已被标记为无关"
+                                  : "该单据暂未归入资料包"
+                        }
+                        description={
+                          selectedDocument.matchReason ??
+                          "归票只代表单据之间的草稿关联，不会生成正式合同、批次、二维码或库存。"
+                        }
+                      />
+
+                      <Descriptions
+                        bordered
+                        size="small"
+                        column={1}
+                        items={[
+                          {
+                            key: "matchStatus",
+                            label: "归票状态",
+                            children: (
+                              <Space wrap>
+                                {renderMatchStatusTag(selectedDocument.matchStatus)}
+                                <Typography.Text type="secondary">
+                                  置信度 {selectedDocument.matchConfidence}%
+                                </Typography.Text>
+                                {selectedDocument.manualMatchLocked ? <Tag color="blue">人工锁定</Tag> : null}
+                              </Space>
+                            )
+                          },
+                          {
+                            key: "packageNo",
+                            label: "当前资料包",
+                            children: selectedCurrentPackage ? getPackageDisplayName(selectedCurrentPackage) : "未归入资料包"
+                          },
+                          {
+                            key: "packageSummary",
+                            label: "资料包摘要",
+                            children: selectedCurrentPackage?.matchSummary ?? "-"
+                          }
+                        ]}
+                      />
+
+                      {selectedCurrentPackage ? (
+                        <Card size="small" title="当前资料包内单据">
+                          {selectedPackageDocuments.length > 0 ? (
+                            <List
+                              size="small"
+                              dataSource={selectedPackageDocuments}
+                              renderItem={(item) => (
+                                <List.Item>
+                                  <Space wrap>
+                                    <Tag color="processing">{documentTypeLabelMap[item.documentType]}</Tag>
+                                    <Typography.Text>{item.originalName ?? item.fileName}</Typography.Text>
+                                    <Tag color={aiStatusConfig[item.aiStatus].color}>
+                                      {aiStatusConfig[item.aiStatus].label}
+                                    </Tag>
+                                  </Space>
+                                </List.Item>
+                              )}
+                            />
+                          ) : (
+                            <Empty description="当前资料包还没有可用于正式生成的已识别单据。" />
+                          )}
+                        </Card>
+                      ) : null}
+
+                      <Space wrap>
+                        {selectedCurrentPackage && !selectedDocument.businessCreated ? (
+                          <Button
+                            type="primary"
+                            icon={<CheckCircleOutlined />}
+                            loading={matchingAction === `confirm:${selectedCurrentPackage.id}`}
+                            disabled={selectedDocument.status !== "ACTIVE"}
+                            onClick={() => void handleConfirmDocumentPackage(selectedCurrentPackage.id)}
+                          >
+                            人工确认当前资料包
+                          </Button>
+                        ) : null}
+
+                        {!selectedDocument.businessCreated ? (
+                          <Button
+                            icon={<DeploymentUnitOutlined />}
+                            loading={matchingAction === "create-package"}
+                            disabled={selectedDocument.status !== "ACTIVE"}
+                            onClick={() => void handleCreateDocumentPackage()}
+                          >
+                            新建资料包
+                          </Button>
+                        ) : null}
+
+                        {!selectedDocument.businessCreated && selectedDocument.matchStatus !== "IGNORED" ? (
+                          <Button
+                            danger
+                            loading={matchingAction === "ignore"}
+                            disabled={selectedDocument.status !== "ACTIVE"}
+                            onClick={() => void handleIgnoreDocumentMatch()}
+                          >
+                            标记无关
+                          </Button>
+                        ) : null}
+                      </Space>
+
+                      {selectedMatchCandidates.length > 0 ? (
+                        <Card size="small" title="候选资料包 / 冲突提示">
+                          <List<DocumentPackageCandidate>
+                            size="small"
+                            dataSource={selectedMatchCandidates.slice(0, 6)}
+                            renderItem={(candidate) => (
+                              <List.Item
+                                actions={
+                                  candidate.status === "CONFLICT"
+                                    ? []
+                                    : [
+                                        <Button
+                                          key="confirm"
+                                          size="small"
+                                          type="link"
+                                          loading={matchingAction === `confirm:${candidate.packageDraft.id}`}
+                                          disabled={selectedDocument.businessCreated}
+                                          onClick={() => void handleConfirmDocumentPackage(candidate.packageDraft.id)}
+                                        >
+                                          确认归入
+                                        </Button>
+                                      ]
+                                }
+                              >
+                                <List.Item.Meta
+                                  title={
+                                    <Space wrap>
+                                      <Tag color={packageCandidateStatusConfig[candidate.status].color}>
+                                        {packageCandidateStatusConfig[candidate.status].label}
+                                      </Tag>
+                                      <Typography.Text>{candidate.packageDraft.packageNo}</Typography.Text>
+                                      <Typography.Text type="secondary">
+                                        {candidate.confidence}%
+                                      </Typography.Text>
+                                    </Space>
+                                  }
+                                  description={candidate.reason}
+                                />
+                              </List.Item>
+                            )}
+                          />
+                        </Card>
+                      ) : null}
+
+                      {selectedMatchLogs.length > 0 ? (
+                        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                          最近归票记录：{formatDateTime(selectedMatchLogs[0].createdAt)} ·{" "}
+                          {selectedMatchLogs[0].reason ?? selectedMatchLogs[0].eventType}
+                        </Typography.Paragraph>
+                      ) : null}
+                    </Space>
+                  </Card>
+                ) : null}
+
+                {selectedSpreadsheetExtraction ? (
+                  <Card className="placeholder-card spreadsheet-preview-card" size="small" title="Excel / CSV 明细预览">
+                    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                      <Alert
+                        type="info"
+                        showIcon
+                        message="结构化单据已解析"
+                        description="下方表格来自 Excel/CSV 草稿解析结果，仅用于人工核对和生成业务数据前的草稿确认，不会直接增加库存。"
+                      />
+
+                      <Descriptions
+                        bordered
+                        size="small"
+                        column={1}
+                        items={[
+                          {
+                            key: "format",
+                            label: "来源格式",
+                            children: selectedSpreadsheetExtraction.sourceFormat === "csv" ? "CSV" : "Excel"
+                          },
+                          {
+                            key: "activeSheet",
+                            label: "当前工作表",
+                            children: selectedSpreadsheetExtraction.activeSheetName ?? "-"
+                          },
+                          {
+                            key: "sheetCount",
+                            label: "工作表摘要",
+                            children:
+                              selectedSpreadsheetExtraction.sheets
+                                ?.map((sheet) => `${sheet.name}：${sheet.rowCount}行 / ${sheet.columnCount}列`)
+                                .join("；") || "-"
+                          },
+                          {
+                            key: "headerMap",
+                            label: "表头映射",
+                            children: selectedSpreadsheetExtraction.headerMap
+                              ? Object.entries(selectedSpreadsheetExtraction.headerMap).map(([field, header]) => (
+                                  <Tag key={field} color="blue">
+                                    {field} → {formatChangeValue(header)}
+                                  </Tag>
+                                ))
+                              : "-"
+                          }
+                        ]}
+                      />
+
+                      {selectedSpreadsheetExtraction.warnings?.length ? (
+                        <Alert
+                          type="warning"
+                          showIcon
+                          message="解析提醒"
+                          description={selectedSpreadsheetExtraction.warnings.join("；")}
+                        />
+                      ) : null}
+
+                      {selectedSpreadsheetRows.length > 0 && selectedSpreadsheetColumns.length > 0 ? (
+                        <Table<Record<string, unknown>>
+                          size="small"
+                          rowKey="__rowKey"
+                          dataSource={selectedSpreadsheetRows.map((row, index) => ({
+                            ...row,
+                            __rowKey: index
+                          }))}
+                          columns={selectedSpreadsheetColumns}
+                          pagination={false}
+                          scroll={{ x: "max-content" }}
+                        />
+                      ) : (
+                        <Empty description="当前 Excel/CSV 没有可预览的明细行。" />
+                      )}
+                    </Space>
+                  </Card>
                 ) : null}
 
                 <Form<ExtractionFormValues>
@@ -2020,10 +2954,15 @@ export function DocumentsPage() {
             type="info"
             showIcon
             message="替换不会删除业务数据"
-            description="旧单据会标记为“已替换”，新单据成为当前有效版本。原合同、批次、二维码和库存流水不会被删除。"
+            description="旧单据会标记为“已替换”，新单据成为当前有效版本。支持 PDF、Word、图片、Excel/CSV；原合同、批次、二维码和库存流水不会被删除。"
           />
           <Upload
+            accept={supportedUploadAccept}
             beforeUpload={(file) => {
+              if (!validateDocumentUploadFile(file)) {
+                return Upload.LIST_IGNORE;
+              }
+
               setReplaceFileList([
                 {
                   uid: file.uid,
@@ -2085,6 +3024,65 @@ export function DocumentsPage() {
               />
             </List.Item>
           )}
+        />
+      </Modal>
+
+      <Modal
+        title={changeLogTarget ? `${changeLogTarget.originalName ?? changeLogTarget.fileName} 的变更留痕` : "变更留痕"}
+        open={Boolean(changeLogTarget)}
+        footer={null}
+        width={760}
+        onCancel={() => {
+          setChangeLogTarget(null);
+          setChangeLogs([]);
+        }}
+      >
+        <List<DocumentChangeLog>
+          loading={isChangeLogLoading}
+          dataSource={changeLogs}
+          locale={{ emptyText: "暂无变更留痕。" }}
+          renderItem={(item) => {
+            const changedFields = item.diffJson?.changedFields ?? [];
+
+            return (
+              <List.Item>
+                <List.Item.Meta
+                  title={
+                    <Space wrap>
+                      <Tag color="processing">
+                        {documentChangeEventLabelMap[item.eventType] ?? item.eventType}
+                      </Tag>
+                      <span>{formatDateTime(item.createdAt)}</span>
+                      <Typography.Text type="secondary">
+                        操作人：{item.actorName ?? "demo-owner"}
+                      </Typography.Text>
+                    </Space>
+                  }
+                  description={
+                    <Space direction="vertical" size="small" style={{ width: "100%" }}>
+                      <Typography.Text>{item.reason ?? "系统留痕"}</Typography.Text>
+                      {changedFields.length > 0 ? (
+                        <List
+                          size="small"
+                          bordered
+                          dataSource={changedFields.slice(0, 8)}
+                          renderItem={(field) => (
+                            <List.Item>
+                              <Typography.Text>
+                                {field.field}：{formatChangeValue(field.before)} → {formatChangeValue(field.after)}
+                              </Typography.Text>
+                            </List.Item>
+                          )}
+                        />
+                      ) : (
+                        <Typography.Text type="secondary">该事件没有字段级差异，属于状态或版本链留痕。</Typography.Text>
+                      )}
+                    </Space>
+                  }
+                />
+              </List.Item>
+            );
+          }}
         />
       </Modal>
     </div>

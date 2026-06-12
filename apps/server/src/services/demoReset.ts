@@ -75,6 +75,10 @@ export async function resetDemoEnvironment(prisma: PrismaClient) {
     await tx.contract.deleteMany();
     await tx.aiLog.deleteMany();
     await tx.auditLog.deleteMany();
+    await tx.documentChangeLog.deleteMany();
+    await tx.documentMatchLog.deleteMany();
+    await tx.documentPackageItem.deleteMany();
+    await tx.documentPackageDraft.deleteMany();
     await tx.document.deleteMany();
     await tx.demoConfig.deleteMany();
 
