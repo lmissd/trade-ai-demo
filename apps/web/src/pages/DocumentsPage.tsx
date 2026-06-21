@@ -525,6 +525,14 @@ function formatAmount(amount?: number | null, currency?: string | null) {
   return `${amount.toLocaleString("zh-CN")} ${currency ?? ""}`.trim();
 }
 
+function formatDraftQuantity(quantity?: number | null, unit?: string | null) {
+  if (typeof quantity !== "number") {
+    return "-";
+  }
+
+  return `${quantity}${unit ?? ""}`.trim();
+}
+
 function formatChangeValue(value: unknown) {
   if (value === null || typeof value === "undefined") {
     return "-";
@@ -551,6 +559,17 @@ function validateDocumentUploadFile(file: File) {
   }
 
   return true;
+}
+
+function looksLikePackingListFileName(fileName: string) {
+  const normalizedName = fileName.normalize("NFKC").toLowerCase();
+
+  return (
+    normalizedName.includes("箱单") ||
+    normalizedName.includes("装箱单") ||
+    /packing[\s._-]*list/.test(normalizedName) ||
+    normalizedName.includes("packinglist")
+  );
 }
 
 function readObject(value: unknown): Record<string, unknown> | null {
@@ -999,6 +1018,7 @@ export function DocumentsPage() {
     }
   ] as const;
   const notes = useMemo(() => readNotes(selectedDocument), [selectedDocument]);
+  const selectedDraftValues = useMemo(() => toExtractionValues(selectedDocument), [selectedDocument]);
   const standardScenario = setupStatus?.standardDemoScenario ?? null;
   const activeScenario = setupStatus?.demoScenario ?? null;
   const resetConfirmationPhrase =
@@ -1080,12 +1100,27 @@ export function DocumentsPage() {
       return;
     }
 
+    const nextDocumentType =
+      uploadType === "CONTRACT" && looksLikePackingListFileName(file.name)
+        ? await new Promise<DocumentType>((resolve) => {
+            Modal.confirm({
+              title: "文件看起来像箱单",
+              content: `你当前选择的是“合同”，但文件名“${file.name}”看起来更像“箱单”。要切换为箱单上传吗？`,
+              okText: "切换为箱单",
+              cancelText: "保持合同",
+              centered: true,
+              onOk: () => resolve("PACKING_LIST"),
+              onCancel: () => resolve("CONTRACT")
+            });
+          })
+        : uploadType;
+
     setIsUploading(true);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("documentType", uploadType);
+      formData.append("documentType", nextDocumentType);
 
       const response = await fetch(`${API_BASE_URL}/api/documents/upload`, {
         method: "POST",
@@ -1563,8 +1598,8 @@ export function DocumentsPage() {
   }, [selectedDocument?.id, selectedDocument?.aiStatus, selectedDocument?.updatedAt]);
 
   useEffect(() => {
-    form.setFieldsValue(toExtractionValues(selectedDocument));
-  }, [form, selectedDocument]);
+    form.setFieldsValue(selectedDraftValues);
+  }, [form, selectedDraftValues]);
 
   useEffect(() => {
     if (latestBusinessResult?.document?.id !== selectedDocumentId) {
@@ -1801,6 +1836,48 @@ export function DocumentsPage() {
   const selectedMatchCandidates = activeMatchInfo?.candidates ?? [];
   const selectedMatchLogs = activeMatchInfo?.logs ?? [];
   const selectedPackageDocuments = getActivePackageDocuments(selectedCurrentPackage);
+  const selectedDraftPreviewItems: DescriptionsProps["items"] = [
+    {
+      key: "contractNoDraft",
+      label: "合同草稿号",
+      children: selectedDraftValues.contractNoDraft ?? selectedDocument?.contractNoDraft ?? "-"
+    },
+    {
+      key: "batchNoDraft",
+      label: "批次草稿号",
+      children: selectedDraftValues.batchNoDraft ?? selectedDocument?.batchNoDraft ?? "-"
+    },
+    {
+      key: "productName",
+      label: "货物名称",
+      children: selectedDraftValues.productName ?? "-"
+    },
+    {
+      key: "customerName",
+      label: "客户名称",
+      children: selectedDraftValues.customerName ?? "-"
+    },
+    {
+      key: "supplierName",
+      label: "供应商名称",
+      children: selectedDraftValues.supplierName ?? "-"
+    },
+    {
+      key: "destinationWarehouse",
+      label: "目的仓库",
+      children: selectedDraftValues.destinationWarehouse ?? "-"
+    },
+    {
+      key: "totalQuantity",
+      label: "数量 / 单位",
+      children: formatDraftQuantity(selectedDraftValues.totalQuantity, selectedDraftValues.unit)
+    },
+    {
+      key: "amount",
+      label: "金额 / 币种",
+      children: formatAmount(selectedDraftValues.amount, selectedDraftValues.currency)
+    }
+  ].filter(Boolean) as DescriptionsProps["items"];
 
   const generatedItems: DescriptionsProps["items"] = [
     generatedContract
@@ -2044,42 +2121,8 @@ export function DocumentsPage() {
               <Statistic title="已生成正式数据" value={generatedCount} suffix="份" />
             </Card>
           </div>
-        </Col>
-      </Row>
 
-      <Row gutter={[20, 20]} align="top">
-        <Col xs={24} xl={14}>
-          <Card
-            className="placeholder-card document-table-card"
-            title="单据列表"
-            extra={
-              <Button icon={<ReloadOutlined />} onClick={() => void loadDocuments()}>
-                刷新
-              </Button>
-            }
-          >
-            <Table<DocumentRecord>
-              rowKey="id"
-              loading={isLoading}
-              columns={columns}
-              dataSource={documents}
-              pagination={{ pageSize: 6, hideOnSinglePage: true }}
-              scroll={{ x: 1980 }}
-              rowClassName={(record) =>
-                record.id === selectedDocumentId ? "documents-table-row-selected" : ""
-              }
-              onRow={(record) => ({
-                onClick: () => setSelectedDocumentId(record.id)
-              })}
-              locale={{
-                emptyText: <Empty description="还没有上传任何单据。" />
-              }}
-            />
-          </Card>
-        </Col>
-
-        <Col xs={24} xl={10}>
-          <Card className="placeholder-card document-detail-card" title="识别结果与人工修正">
+          <Card className="placeholder-card document-detail-card" title="识别结果与人工修正" style={{ marginTop: 20 }}>
             {selectedDocument ? (
               <Space direction="vertical" size="large" style={{ width: "100%" }}>
                 <Descriptions
@@ -2152,21 +2195,13 @@ export function DocumentsPage() {
                   ) : null}
 
                   {canDeleteDocument(selectedDocument) ? (
-                    <Button
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => openDeleteModal(selectedDocument)}
-                    >
+                    <Button danger icon={<DeleteOutlined />} onClick={() => openDeleteModal(selectedDocument)}>
                       删除单据
                     </Button>
                   ) : null}
 
                   {canVoidDocument(selectedDocument) ? (
-                    <Button
-                      danger
-                      icon={<StopOutlined />}
-                      onClick={() => openVoidModal(selectedDocument)}
-                    >
+                    <Button danger icon={<StopOutlined />} onClick={() => openVoidModal(selectedDocument)}>
                       作废单据
                     </Button>
                   ) : null}
@@ -2193,10 +2228,7 @@ export function DocumentsPage() {
 
                   {selectedDocument.status === "REPLACED" ? (
                     <>
-                      <Button
-                        icon={<HistoryOutlined />}
-                        onClick={() => void openHistoryModal(selectedDocument)}
-                      >
+                      <Button icon={<HistoryOutlined />} onClick={() => void openHistoryModal(selectedDocument)}>
                         查看历史
                       </Button>
                       {selectedDocument.replacedByDocumentId ? (
@@ -2253,7 +2285,9 @@ export function DocumentsPage() {
                   />
                 ) : null}
 
-                {selectedDocument.aiStatus === "EXTRACTED" && !selectedDocument.businessCreated && selectedDocument.status === "ACTIVE" ? (
+                {selectedDocument.aiStatus === "EXTRACTED" &&
+                !selectedDocument.businessCreated &&
+                selectedDocument.status === "ACTIVE" ? (
                   <Alert
                     type={selectedDocumentBusinessGate?.isReady ? "info" : "warning"}
                     showIcon
@@ -2277,6 +2311,109 @@ export function DocumentsPage() {
                     message="正式业务数据已生成，草稿已锁定"
                     description="这份单据已经生成正式合同、批次、采购草稿和应收草稿。后续若需失效处理，只能作废或替换，不能误删，也不会改变库存。"
                   />
+                ) : null}
+
+                {selectedDocument.aiStatus === "EXTRACTED" ? (
+                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                    <div>
+                      <Typography.Text strong>识别结果预览</Typography.Text>
+                      <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+                        这里展示合同 / 箱单里识别出来的关键字段，保存修正后只会更新草稿，不会直接生成正式业务数据。
+                      </Typography.Paragraph>
+                    </div>
+
+                    <Descriptions bordered size="small" column={1} items={selectedDraftPreviewItems} />
+
+                    {notes.length > 0 ? (
+                      <Alert
+                        type="info"
+                        showIcon
+                        message="识别备注"
+                        description={
+                          <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                            {notes.map((item) => (
+                              <Typography.Text key={item}>{item}</Typography.Text>
+                            ))}
+                          </Space>
+                        }
+                      />
+                    ) : null}
+
+                    <div>
+                      <Typography.Text strong>人工修正</Typography.Text>
+                      <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+                        你可以直接改合同号、批次号、货物、数量、金额等字段，再点击保存。
+                      </Typography.Paragraph>
+                    </div>
+
+                    <Form form={form} layout="vertical" onFinish={(values) => void handleSave(values)}>
+                      <Row gutter={[12, 12]}>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="合同草稿号" name="contractNoDraft">
+                            <Input placeholder="例如 CTR-DEMO-202606-001" disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="批次草稿号" name="batchNoDraft">
+                            <Input placeholder="例如 BAT-DEMO-202606-001" disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="货物名称" name="productName">
+                            <Input placeholder="例如 铜缆演示货物" disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="目的仓库" name="destinationWarehouse">
+                            <Input placeholder="例如 赞比亚仓库" disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="客户名称" name="customerName">
+                            <Input placeholder="例如 赞比亚客户 ABC Trading" disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="供应商名称" name="supplierName">
+                            <Input placeholder="例如 中国供应商 China Supplier Co., Ltd." disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="数量" name="totalQuantity">
+                            <InputNumber min={0} style={{ width: "100%" }} disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="单位" name="unit">
+                            <Input placeholder="例如 箱" disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="金额" name="amount">
+                            <InputNumber min={0} style={{ width: "100%" }} disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Form.Item label="币种" name="currency">
+                            <Input placeholder="例如 USD" disabled={!isDraftEditable} />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+
+                      <Space wrap>
+                        <Button
+                          type="primary"
+                          htmlType="submit"
+                          icon={<SaveOutlined />}
+                          loading={isSaving}
+                          disabled={!isDraftEditable}
+                        >
+                          保存修正
+                        </Button>
+                        {!isDraftEditable ? <Typography.Text type="secondary">草稿已锁定，仅可查看。</Typography.Text> : null}
+                      </Space>
+                    </Form>
+                  </Space>
                 ) : null}
 
                 {selectedDocument.aiStatus === "EXTRACTED" ? (
@@ -2346,7 +2483,9 @@ export function DocumentsPage() {
                           {
                             key: "packageNo",
                             label: "当前资料包",
-                            children: selectedCurrentPackage ? getPackageDisplayName(selectedCurrentPackage) : "未归入资料包"
+                            children: selectedCurrentPackage
+                              ? getPackageDisplayName(selectedCurrentPackage)
+                              : "未归入资料包"
                           },
                           {
                             key: "packageSummary",
@@ -2469,310 +2608,204 @@ export function DocumentsPage() {
                     </Space>
                   </Card>
                 ) : null}
-
-                {selectedSpreadsheetExtraction ? (
-                  <Card className="placeholder-card spreadsheet-preview-card" size="small" title="Excel / CSV 明细预览">
-                    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-                      <Alert
-                        type="info"
-                        showIcon
-                        message="结构化单据已解析"
-                        description="下方表格来自 Excel/CSV 草稿解析结果，仅用于人工核对和生成业务数据前的草稿确认，不会直接增加库存。"
-                      />
-
-                      <Descriptions
-                        bordered
-                        size="small"
-                        column={1}
-                        items={[
-                          {
-                            key: "format",
-                            label: "来源格式",
-                            children: selectedSpreadsheetExtraction.sourceFormat === "csv" ? "CSV" : "Excel"
-                          },
-                          {
-                            key: "activeSheet",
-                            label: "当前工作表",
-                            children: selectedSpreadsheetExtraction.activeSheetName ?? "-"
-                          },
-                          {
-                            key: "sheetCount",
-                            label: "工作表摘要",
-                            children:
-                              selectedSpreadsheetExtraction.sheets
-                                ?.map((sheet) => `${sheet.name}：${sheet.rowCount}行 / ${sheet.columnCount}列`)
-                                .join("；") || "-"
-                          },
-                          {
-                            key: "headerMap",
-                            label: "表头映射",
-                            children: selectedSpreadsheetExtraction.headerMap
-                              ? Object.entries(selectedSpreadsheetExtraction.headerMap).map(([field, header]) => (
-                                  <Tag key={field} color="blue">
-                                    {field} → {formatChangeValue(header)}
-                                  </Tag>
-                                ))
-                              : "-"
-                          }
-                        ]}
-                      />
-
-                      {selectedSpreadsheetExtraction.warnings?.length ? (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          message="解析提醒"
-                          description={selectedSpreadsheetExtraction.warnings.join("；")}
-                        />
-                      ) : null}
-
-                      {selectedSpreadsheetRows.length > 0 && selectedSpreadsheetColumns.length > 0 ? (
-                        <Table<Record<string, unknown>>
-                          size="small"
-                          rowKey="__rowKey"
-                          dataSource={selectedSpreadsheetRows.map((row, index) => ({
-                            ...row,
-                            __rowKey: index
-                          }))}
-                          columns={selectedSpreadsheetColumns}
-                          pagination={false}
-                          scroll={{ x: "max-content" }}
-                        />
-                      ) : (
-                        <Empty description="当前 Excel/CSV 没有可预览的明细行。" />
-                      )}
-                    </Space>
-                  </Card>
-                ) : null}
-
-                <Form<ExtractionFormValues>
-                  form={form}
-                  layout="vertical"
-                  disabled={!isDraftEditable}
-                  onFinish={(values) => void handleSave(values)}
-                >
-                  <Row gutter={16}>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        label="合同草稿号"
-                        name="contractNoDraft"
-                        rules={[{ required: true, message: "请输入合同草稿号。" }]}
-                      >
-                        <Input placeholder="例如 CTR-20260608-ABC123" />
-                      </Form.Item>
-                    </Col>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        label="批次草稿号"
-                        name="batchNoDraft"
-                        rules={[{ required: true, message: "请输入批次草稿号。" }]}
-                      >
-                        <Input placeholder="例如 BAT-20260608-ABC123" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-
-                  <Form.Item
-                    label="商品名称"
-                    name="productName"
-                    rules={[{ required: true, message: "请输入商品名称。" }]}
-                  >
-                    <Input placeholder="请输入商品名称" />
-                  </Form.Item>
-
-                  <Row gutter={16}>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        label="客户名称"
-                        name="customerName"
-                        rules={[{ required: true, message: "请输入客户名称。" }]}
-                      >
-                        <Input placeholder="请输入客户名称" />
-                      </Form.Item>
-                    </Col>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        label="供应商名称"
-                        name="supplierName"
-                        rules={[{ required: true, message: "请输入供应商名称。" }]}
-                      >
-                        <Input placeholder="请输入供应商名称" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-
-                  <Form.Item
-                    label="目的仓库"
-                    name="destinationWarehouse"
-                    rules={[{ required: true, message: "请输入目的仓库。" }]}
-                  >
-                    <Input placeholder="请输入目的仓库" />
-                  </Form.Item>
-
-                  <Row gutter={16}>
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        label="总数量"
-                        name="totalQuantity"
-                        rules={[{ required: true, message: "请输入总数量。" }]}
-                      >
-                        <InputNumber min={1} precision={0} style={{ width: "100%" }} />
-                      </Form.Item>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        label="单位"
-                        name="unit"
-                        rules={[
-                          { required: true, message: "请输入实际单位。" },
-                          {
-                            validator: async (_, value) => {
-                              if (typeof value === "string" && value.trim() === "?") {
-                                throw new Error("单位不能保存为 ?，请输入真实单位。");
-                              }
-                            }
-                          }
-                        ]}
-                      >
-                        <Input placeholder="例如 箱" />
-                      </Form.Item>
-                    </Col>
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        label="币种"
-                        name="currency"
-                        rules={[{ required: true, message: "请输入币种。" }]}
-                      >
-                        <Input placeholder="例如 USD" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-
-                  <Form.Item
-                    label="合同金额"
-                    name="amount"
-                    rules={[{ required: true, message: "请输入合同金额。" }]}
-                  >
-                    <InputNumber min={0} style={{ width: "100%" }} />
-                  </Form.Item>
-
-                  <Space wrap>
-                    <Button
-                      type="primary"
-                      htmlType="submit"
-                      icon={<SaveOutlined />}
-                      loading={isSaving}
-                      disabled={!isDraftEditable}
-                    >
-                      保存人工修正
-                    </Button>
-                    {canConfirmBusinessData(selectedDocument) ? (
-                      <Button
-                        icon={<CheckCircleOutlined />}
-                        disabled={!selectedDocumentBusinessGate?.isReady}
-                        title={selectedDocumentBusinessGate?.isReady ? undefined : selectedDocumentBusinessGate?.message}
-                        loading={isConfirmingBusinessData}
-                        onClick={() => void handleConfirmBusinessData()}
-                      >
-                        确认生成业务数据
-                      </Button>
-                    ) : null}
-                  </Space>
-                </Form>
-
-                {notes.length > 0 ? (
-                  <div className="documents-notes">
-                    <Typography.Text strong>AI Mock 说明</Typography.Text>
-                    <ul className="placeholder-list">
-                      {notes.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-
-                <Card className="placeholder-card" title="正式业务数据生成" size="small">
-                  {selectedDocument.businessCreated ? (
-                    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-                      <Descriptions bordered size="small" column={1} items={generatedItems} />
-
-                      <Space wrap>
-                        <Button icon={<BarsOutlined />} onClick={() => navigate("/contracts")}>
-                          查看合同数据
-                        </Button>
-                        <Button icon={<DeploymentUnitOutlined />} onClick={() => navigate("/batches")}>
-                          查看批次数据
-                        </Button>
-                        {selectedDocument.status === "REPLACED" ? (
-                          <Button icon={<HistoryOutlined />} onClick={() => void openHistoryModal(selectedDocument)}>
-                            查看版本历史
-                          </Button>
-                        ) : null}
-                      </Space>
-
-                      {selectedDocument.voidReason ? (
-                        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                          当前作废原因：{selectedDocument.voidReason}
-                        </Typography.Paragraph>
-                      ) : null}
-                    </Space>
-                  ) : (
-                    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-                      <Alert
-                        type={selectedDocumentBusinessGate?.isReady ? "success" : "warning"}
-                        showIcon
-                        message={
-                          selectedDocumentBusinessGate?.isReady
-                            ? "成熟版建议条件已满足：合同 + 箱单"
-                            : "成熟版建议条件未满足：至少准备合同 + 箱单"
-                        }
-                        description={
-                          selectedDocumentBusinessGate?.isReady
-                            ? "当前这票业务已至少具备一份已识别合同和一份已识别箱单。你可以继续修正字段，再决定是否确认生成正式业务数据。"
-                            : selectedDocumentBusinessGate?.message ??
-                              "当前这票业务还不满足生成正式业务数据的前置条件。"
-                        }
-                      />
-
-                      <Alert
-                        type="warning"
-                        showIcon
-                        message="还没有生成正式业务数据"
-                        description="请先确认草稿字段无误，再执行正式生成。系统会创建合同、合同明细、批次、采购草稿和应收草稿，但不会创建库存。"
-                      />
-
-                      <Button
-                        type="primary"
-                        icon={<CheckCircleOutlined />}
-                        loading={isConfirmingBusinessData}
-                        disabled={!canConfirmBusinessData(selectedDocument) || !selectedDocumentBusinessGate?.isReady}
-                        title={selectedDocumentBusinessGate?.isReady ? undefined : selectedDocumentBusinessGate?.message}
-                        onClick={() => void handleConfirmBusinessData()}
-                      >
-                        确认生成业务数据
-                      </Button>
-
-                      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                        草稿删除不会影响库存；只有在生成二维码并扫码入库后，库存才会变化。
-                      </Typography.Paragraph>
-                    </Space>
-                  )}
-
-                  {selectedBusinessResult ? (
-                    <Alert
-                      style={{ marginTop: 16 }}
-                      type="info"
-                      showIcon
-                      message="库存提示"
-                      description={selectedBusinessResult.inventoryNotice}
-                    />
-                  ) : null}
-                </Card>
               </Space>
             ) : (
               <Empty description="从左侧上传第一份合同或箱单后，这里会显示识别结果、删除/作废动作和正式业务数据入口。" />
             )}
           </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[20, 20]} align="top">
+        <Col xs={24} xl={14}>
+          <Card
+            className="placeholder-card document-table-card"
+            title="单据列表"
+            extra={
+              <Button icon={<ReloadOutlined />} onClick={() => void loadDocuments()}>
+                刷新
+              </Button>
+            }
+          >
+            <Table<DocumentRecord>
+              rowKey="id"
+              loading={isLoading}
+              columns={columns}
+              dataSource={documents}
+              pagination={{ pageSize: 6, hideOnSinglePage: true }}
+              scroll={{ x: 1980 }}
+              rowClassName={(record) =>
+                record.id === selectedDocumentId ? "documents-table-row-selected" : ""
+              }
+              onRow={(record) => ({
+                onClick: () => setSelectedDocumentId(record.id)
+              })}
+              locale={{
+                emptyText: <Empty description="还没有上传任何单据。" />
+              }}
+            />
+          </Card>
+        </Col>
+
+        <Col xs={24} xl={10}>
+          <Space direction="vertical" size="large" style={{ width: "100%" }}>
+            <Card className="placeholder-card" title="正式业务数据生成" size="small">
+              {selectedDocument ? (
+                selectedDocument.businessCreated ? (
+                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                    <Descriptions bordered size="small" column={1} items={generatedItems} />
+
+                    <Space wrap>
+                      <Button icon={<BarsOutlined />} onClick={() => navigate("/contracts")}>
+                        查看合同数据
+                      </Button>
+                      <Button icon={<DeploymentUnitOutlined />} onClick={() => navigate("/batches")}>
+                        查看批次追踪
+                      </Button>
+                      {selectedDocument.status === "REPLACED" ? (
+                        <Button icon={<HistoryOutlined />} onClick={() => void openHistoryModal(selectedDocument)}>
+                          查看版本历史
+                        </Button>
+                      ) : null}
+                    </Space>
+
+                    {selectedDocument.voidReason ? (
+                      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                        当前作废原因：{selectedDocument.voidReason}
+                      </Typography.Paragraph>
+                    ) : null}
+                  </Space>
+                ) : (
+                  <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                    <Alert
+                      type={selectedDocumentBusinessGate?.isReady ? "success" : "warning"}
+                      showIcon
+                      message={
+                        selectedDocumentBusinessGate?.isReady
+                          ? "成熟版建议条件已满足：合同 + 箱单"
+                          : "成熟版建议条件未满足：至少准备合同 + 箱单"
+                      }
+                      description={
+                        selectedDocumentBusinessGate?.isReady
+                          ? "当前这票业务已至少具备一份已识别合同和一份已识别箱单。你可以继续修正字段，再决定是否确认生成正式业务数据。"
+                          : selectedDocumentBusinessGate?.message ??
+                            "当前这票业务还不满足生成正式业务数据的前置条件。"
+                      }
+                    />
+
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message="还没有生成正式业务数据"
+                      description="请先确认草稿字段无误，再执行正式生成。系统会创建合同、合同明细、批次、采购草稿和应收草稿，但不会创建库存。"
+                    />
+
+                    <Button
+                      type="primary"
+                      icon={<CheckCircleOutlined />}
+                      loading={isConfirmingBusinessData}
+                      disabled={!canConfirmBusinessData(selectedDocument) || !selectedDocumentBusinessGate?.isReady}
+                      title={selectedDocumentBusinessGate?.isReady ? undefined : selectedDocumentBusinessGate?.message}
+                      onClick={() => void handleConfirmBusinessData()}
+                    >
+                      确认生成业务数据
+                    </Button>
+
+                    <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                      草稿删除不会影响库存；只有在生成二维码并扫码入库后，库存才会变化。
+                    </Typography.Paragraph>
+                  </Space>
+                )
+              ) : (
+                <Empty description="从左侧上传第一份合同或箱单后，这里会显示正式业务数据入口。" />
+              )}
+
+              {selectedBusinessResult ? (
+                <Alert
+                  style={{ marginTop: 16 }}
+                  type="info"
+                  showIcon
+                  message="库存提示"
+                  description={selectedBusinessResult.inventoryNotice}
+                />
+              ) : null}
+            </Card>
+
+            {selectedSpreadsheetExtraction ? (
+              <Card className="placeholder-card spreadsheet-preview-card" size="small" title="Excel / CSV 明细预览">
+                <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="结构化单据已解析"
+                    description="下方表格来自 Excel/CSV 草稿解析结果，仅用于人工核对和生成业务数据前的草稿确认，不会直接增加库存。"
+                  />
+
+                  <Descriptions
+                    bordered
+                    size="small"
+                    column={1}
+                    items={[
+                      {
+                        key: "format",
+                        label: "来源格式",
+                        children: selectedSpreadsheetExtraction.sourceFormat === "csv" ? "CSV" : "Excel"
+                      },
+                      {
+                        key: "activeSheet",
+                        label: "当前工作表",
+                        children: selectedSpreadsheetExtraction.activeSheetName ?? "-"
+                      },
+                      {
+                        key: "sheetCount",
+                        label: "工作表摘要",
+                        children:
+                          selectedSpreadsheetExtraction.sheets
+                            ?.map((sheet) => `${sheet.name}：${sheet.rowCount}行 / ${sheet.columnCount}列`)
+                            .join("；") || "-"
+                      },
+                      {
+                        key: "headerMap",
+                        label: "表头映射",
+                        children: selectedSpreadsheetExtraction.headerMap
+                          ? Object.entries(selectedSpreadsheetExtraction.headerMap).map(([field, header]) => (
+                              <Tag key={field} color="blue">
+                                {field} → {formatChangeValue(header)}
+                              </Tag>
+                            ))
+                          : "-"
+                      }
+                    ]}
+                  />
+
+                  {selectedSpreadsheetExtraction.warnings?.length ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message="解析提醒"
+                      description={selectedSpreadsheetExtraction.warnings.join("；")}
+                    />
+                  ) : null}
+
+                  {selectedSpreadsheetRows.length > 0 && selectedSpreadsheetColumns.length > 0 ? (
+                    <Table<Record<string, unknown>>
+                      size="small"
+                      rowKey="__rowKey"
+                      dataSource={selectedSpreadsheetRows.map((row, index) => ({
+                        ...row,
+                        __rowKey: index
+                      }))}
+                      columns={selectedSpreadsheetColumns}
+                      pagination={false}
+                      scroll={{ x: "max-content" }}
+                    />
+                  ) : (
+                    <Empty description="当前 Excel/CSV 没有可预览的明细行。" />
+                  )}
+                </Space>
+              </Card>
+            ) : null}
+          </Space>
         </Col>
       </Row>
 

@@ -1,10 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
 import cors from "cors";
 import express from "express";
 import { aiAssistantRouter } from "./routes/ai-assistant";
 import { batchesRouter } from "./routes/batches";
 import { companiesRouter } from "./routes/companies";
+import { workspaceRoot, uploadsRoot } from "./config/paths";
 import { contractsRouter } from "./routes/contracts";
-import { uploadsRoot } from "./config/paths";
 import { costsRouter } from "./routes/costs";
 import { customsRouter } from "./routes/customs";
 import { dashboardRouter } from "./routes/dashboard";
@@ -23,6 +25,9 @@ import { workOrdersRouter } from "./routes/work-orders";
 
 export function createApp() {
   const app = express();
+  const webDistRoot = path.join(workspaceRoot, "apps/web/dist");
+  const webIndexHtml = path.join(webDistRoot, "index.html");
+  const hasWebBundle = fs.existsSync(webIndexHtml);
 
   app.use(cors());
   app.use(express.json());
@@ -35,13 +40,6 @@ export function createApp() {
       "Surrogate-Control": "no-store"
     });
     next();
-  });
-
-  app.get("/", (_request, response) => {
-    response.json({
-      name: "trade-ai-demo-server",
-      message: "International Trade AI + QR Demo server is running."
-    });
   });
 
   app.use("/api", healthRouter);
@@ -63,6 +61,26 @@ export function createApp() {
   app.use("/api/qr-items", qrItemsRouter);
   app.use("/api/warehouse", warehouseRouter);
   app.use("/api/work-orders", workOrdersRouter);
+
+  if (hasWebBundle) {
+    app.use(express.static(webDistRoot));
+
+    app.get("*", (request, response, next) => {
+      if (request.path.startsWith("/api")) {
+        next();
+        return;
+      }
+
+      response.sendFile(webIndexHtml);
+    });
+  } else {
+    app.get("/", (_request, response) => {
+      response.json({
+        name: "trade-ai-demo-server",
+        message: "International Trade AI + QR Demo server is running."
+      });
+    });
+  }
 
   return app;
 }
