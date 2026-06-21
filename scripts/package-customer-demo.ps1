@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $releaseRoot = "D:\trade-ai-demo-customer-package"
@@ -7,6 +7,15 @@ $zipPath = "D:\trade-ai-demo-customer-package.zip"
 function Write-Step {
     param([string]$Message)
     Write-Host $Message -ForegroundColor Cyan
+}
+
+function Ensure-ParentDir {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $parent = Split-Path -Parent $Path
+    if ($parent) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
 }
 
 function Copy-IfExists {
@@ -19,11 +28,7 @@ function Copy-IfExists {
         return
     }
 
-    $parent = Split-Path -Parent $Destination
-    if ($parent) {
-        New-Item -ItemType Directory -Path $parent -Force | Out-Null
-    }
-
+    Ensure-ParentDir -Path $Destination
     Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -Force
 }
 
@@ -49,9 +54,15 @@ function Remove-PathIfExists {
     }
 }
 
+function Get-NodeInstallDir {
+    $nodeCmd = Get-Command node -ErrorAction Stop
+    return Split-Path -Parent $nodeCmd.Source
+}
+
 Set-Location $repoRoot
 
 Write-Step "Building web bundle..."
+$env:VITE_CUSTOMER_MODE = "1"
 npm run build --workspace @trade-ai-demo/web
 
 Write-Step "Building server bundle..."
@@ -63,7 +74,6 @@ New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
 
 $releaseAppsServer = Join-Path $releaseRoot "apps/server"
 $releaseAppsWeb = Join-Path $releaseRoot "apps/web"
-
 New-Item -ItemType Directory -Path $releaseAppsServer -Force | Out-Null
 New-Item -ItemType Directory -Path $releaseAppsWeb -Force | Out-Null
 
@@ -74,17 +84,30 @@ Copy-DirectoryContents -Source (Join-Path $repoRoot "apps/server/node_modules") 
 Copy-IfExists -Source (Join-Path $repoRoot "apps/server/prisma/dev.db") -Destination (Join-Path $releaseAppsServer "prisma/dev.db")
 Copy-DirectoryContents -Source (Join-Path $repoRoot "uploads") -Destination (Join-Path $releaseRoot "uploads")
 Copy-DirectoryContents -Source (Join-Path $repoRoot "pics") -Destination (Join-Path $releaseRoot "pics")
-Copy-DirectoryContents -Source (Join-Path $repoRoot "需求") -Destination (Join-Path $releaseRoot "requirements")
+Copy-DirectoryContents -Source (Join-Path $repoRoot "需求") -Destination (Join-Path $releaseRoot "需求")
 
-$nodeInstall = (Get-Command node).Source | Split-Path -Parent
+$nodeInstall = Get-NodeInstallDir
 Copy-DirectoryContents -Source $nodeInstall -Destination (Join-Path $releaseRoot "node")
 
 Write-Step "Writing customer-facing config and launchers..."
 $envFile = @"
+SERVER_PORT=3001
+DATABASE_URL="file:./apps/server/prisma/dev.db"
 AI_PROVIDER=deepseek
 AI_MODEL=deepseek-v4-flash
 AI_BASE_URL=https://api.deepseek.com
 AI_API_KEY=
+DEMO_SCENARIO_NAME=default-zambia-demo
+DEMO_ORIGIN=中国
+DEMO_PRODUCT_NAME=铜缆演示货物
+DEMO_CUSTOMER_NAME=赞比亚客户 ABC Trading
+DEMO_SUPPLIER_NAME=中国供应商 China Supplier Co., Ltd.
+DEMO_DESTINATION_WAREHOUSE=赞比亚仓库
+DEMO_TOTAL_QUANTITY=100
+DEMO_UNIT=箱
+DEMO_PLANNED_OUTBOUND_QUANTITY=20
+DEMO_AMOUNT=50000
+DEMO_CURRENCY=USD
 "@
 Set-Content -LiteralPath (Join-Path $releaseRoot ".env") -Value $envFile -Encoding UTF8
 
@@ -94,8 +117,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $nodeExe = Join-Path $root "node/node.exe"
 $serverEntry = Join-Path $root "apps/server/dist/index.js"
+$openUrl = "http://127.0.0.1:3001"
 $healthUrl = "http://127.0.0.1:3001/api/health"
-$openUrl = "http://127.0.0.1:3001/documents"
 $pidFile = Join-Path $root ".runtime/server.pid"
 
 function Test-Port {
@@ -147,19 +170,7 @@ if (-not (Test-Port)) {
     }
 }
 
-$chromeCandidates = @(
-    "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-    "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe"
-)
-
-$chrome = $chromeCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-
-if ($chrome) {
-    Start-Process -FilePath $chrome -ArgumentList $openUrl
-} else {
-    Start-Process $openUrl
-}
-
+Start-Process $openUrl
 Write-Host "Demo started." -ForegroundColor Green
 '@
 Set-Content -LiteralPath (Join-Path $releaseRoot "start-demo.ps1") -Value $launchPs1 -Encoding UTF8
@@ -206,14 +217,17 @@ endlocal
 Set-Content -LiteralPath (Join-Path $releaseRoot "stop-demo.bat") -Value $stopBat -Encoding ASCII
 
 $readme = @'
-Customer demo package
+客户演示包使用说明
 
-1. Double-click start-demo.bat.
-2. The browser will open the documents demo page automatically.
-3. Use the files in pics and requirements for the customer demo.
-4. If you want live AI answers, fill in the API key in .env before starting.
+1. 双击 `start-demo.bat`。
+2. 系统会自动启动本地演示并打开浏览器。
+3. 打开后可直接浏览合同、单据、库存、AI 助手和“测试资料”页面。
+4. “测试资料”里已经附带需求截图和测试单据图片，可直接用于上传演示。
+5. 如果需要启用 DeepSeek 实时回答，请在启动前填写包内 `.env` 的 `AI_API_KEY`。
+6. 演示结束后，双击 `stop-demo.bat` 停止服务。
 '@
 Set-Content -LiteralPath (Join-Path $releaseRoot "README.txt") -Value $readme -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $releaseRoot "使用说明.txt") -Value $readme -Encoding UTF8
 
 Write-Step "Cleaning release directory..."
 Remove-PathIfExists -Path (Join-Path $releaseAppsServer "package.json")

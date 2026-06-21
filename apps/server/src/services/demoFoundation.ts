@@ -22,6 +22,7 @@ type DbClient = Prisma.TransactionClient | PrismaClient;
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const HOUR_IN_MS = 60 * 60 * 1000;
+const PALLET_SIZE = 10;
 
 const companySeeds = [
   {
@@ -213,6 +214,20 @@ function buildDocumentStoragePath(fileName: string) {
     filePath,
     fileUrl: `/${filePath}`
   };
+}
+
+function buildTraceCode(batchNo: string, level: "UNIT" | "BOX" | "PALLET", sequenceNo: number) {
+  const padded = String(sequenceNo).padStart(4, "0");
+
+  if (level === "UNIT") {
+    return `${batchNo}-UNIT-${padded}`;
+  }
+
+  if (level === "BOX") {
+    return `${batchNo}-BOX-${padded}`;
+  }
+
+  return `${batchNo}-PLT-${padded}`;
 }
 
 function toJsonObject(value: Record<string, unknown>) {
@@ -1301,7 +1316,12 @@ export async function ensureStandardDemoBusinessScenario(
       contractId: contract.id,
       batchId: batch.id,
       warehouseId: foundation.demoWarehouse.id,
+      appointmentNo: `APT-${standardScenarioIdentifiers.batchNo}`,
+      appointmentTime: addTime(baseTime, 7 * DAY_IN_MS + 2 * HOUR_IN_MS),
       expectedArrivalTime: inboundCompletedAt,
+      waveNo: `WAVE-IN-${standardScenarioIdentifiers.batchNo}`,
+      dockNo: "DOCK-01",
+      arrivalStatus: "ARRIVED",
       skuName: foundation.demoSku.name,
       quantity: scenario.totalQuantity,
       unit: scenario.unit,
@@ -1370,6 +1390,14 @@ export async function ensureStandardDemoBusinessScenario(
       contractId: contract.id,
       batchId: batch.id,
       warehouseId: foundation.demoWarehouse.id,
+      waveNo: `WAVE-OUT-${standardScenarioIdentifiers.batchNo}`,
+      pickupListNo: `PKL-${standardScenarioIdentifiers.batchNo}`,
+      reviewStatus: "APPROVED",
+      firstReviewerName: "Demo Warehouse Owner",
+      firstReviewedAt: addTime(baseTime, 9 * DAY_IN_MS - 2 * HOUR_IN_MS),
+      secondReviewerName: "Demo Warehouse Owner",
+      secondReviewedAt: addTime(baseTime, 9 * DAY_IN_MS - HOUR_IN_MS),
+      pickingStatus: "READY_TO_SCAN",
       quantity: scenario.plannedOutboundQuantity,
       unit: scenario.unit,
       status: "COMPLETED",
@@ -1544,6 +1572,9 @@ export async function ensureStandardDemoBusinessScenario(
     const inboundAt = addTime(baseTime, 8 * DAY_IN_MS + serialNo * 1000);
     const isOutbound = serialNo <= scenario.plannedOutboundQuantity;
     const outboundAt = isOutbound ? addTime(baseTime, 9 * DAY_IN_MS + serialNo * 1000) : null;
+    const unitTraceCode = buildTraceCode(batch.batchNo, "UNIT", serialNo);
+    const boxTraceCode = buildTraceCode(batch.batchNo, "BOX", serialNo);
+    const palletTraceCode = buildTraceCode(batch.batchNo, "PALLET", Math.ceil(serialNo / PALLET_SIZE));
 
     const qrItem = await db.qrItem.create({
       data: {
@@ -1557,6 +1588,9 @@ export async function ensureStandardDemoBusinessScenario(
         currentWarehouse: foundation.demoWarehouse.name,
         warehouseId: foundation.demoWarehouse.id,
         locationId: foundation.demoLocation.id,
+        unitTraceCode,
+        boxTraceCode,
+        palletTraceCode,
         inboundAt,
         outboundAt,
         createdAt: contractCreatedAt,

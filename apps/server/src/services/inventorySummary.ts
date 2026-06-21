@@ -32,6 +32,46 @@ export type InventorySummaryResult = {
     statusAccountedQuantity: number;
     isConsistent: boolean;
   };
+  hierarchySummary: {
+    unitCount: number;
+    boxCount: number;
+    palletCount: number;
+  };
+  ageBuckets: Array<{
+    key: string;
+    label: string;
+    quantity: number;
+  }>;
+  locationUtilization: Array<{
+    locationId: string;
+    warehouseId: string | null;
+    locationCode: string;
+    zone: string | null;
+    capacity: number | null;
+    occupiedQuantity: number;
+    frozenQuantity: number;
+    availableCapacity: number | null;
+    utilizationPercent: number | null;
+  }>;
+  freezeReasons: Array<{
+    reason: string;
+    quantity: number;
+  }>;
+  stocktakes: Array<{
+    id: string;
+    stocktakeNo: string;
+    status: string;
+    batchId: string | null;
+    batchNo: string;
+    warehouseId: string | null;
+    warehouseName: string;
+    plannedQuantity: number;
+    actualQuantity: number;
+    differenceQuantity: number;
+    operatorName: string | null;
+    createdAt: Date;
+    completedAt: Date | null;
+  }>;
   byBatch: Array<
     InventoryMetrics & {
       batchId: string;
@@ -144,6 +184,38 @@ function addQrStatus(metrics: InventoryMetrics, status: QrItemStatus) {
   }
 }
 
+function createAgeBuckets() {
+  return [
+    { key: "0_7", label: "0-7天", quantity: 0 },
+    { key: "8_30", label: "8-30天", quantity: 0 },
+    { key: "31_PLUS", label: "31天以上", quantity: 0 }
+  ];
+}
+
+function addAgeBucket(
+  buckets: ReturnType<typeof createAgeBuckets>,
+  inboundAt: Date | null,
+  now: Date
+) {
+  if (!inboundAt) {
+    return;
+  }
+
+  const ageDays = Math.max(0, Math.floor((now.getTime() - inboundAt.getTime()) / (24 * 60 * 60 * 1000)));
+
+  if (ageDays <= 7) {
+    buckets[0].quantity += 1;
+    return;
+  }
+
+  if (ageDays <= 30) {
+    buckets[1].quantity += 1;
+    return;
+  }
+
+  buckets[2].quantity += 1;
+}
+
 export async function buildInventorySummary(filters: InventoryFilters = {}): Promise<InventorySummaryResult> {
   const batchId = filters.batchId?.trim() || null;
   const contractId = filters.contractId?.trim() || null;
@@ -173,7 +245,8 @@ export async function buildInventorySummary(filters: InventoryFilters = {}): Pro
     ...(warehouseId ? { warehouseId } : {})
   };
 
-  const [qrItems, recentMovements, totalInboundMovements, totalOutboundMovements] = await Promise.all([
+  const [qrItems, recentMovements, totalInboundMovements, totalOutboundMovements, locations, stocktakeOrders] =
+    await Promise.all([
     prisma.qrItem.findMany({
       where: qrWhere,
       orderBy: [{ batchId: "asc" }, { serialNo: "asc" }],
@@ -184,6 +257,12 @@ export async function buildInventorySummary(filters: InventoryFilters = {}): Pro
         status: true,
         currentWarehouse: true,
         warehouseId: true,
+        locationId: true,
+        unitTraceCode: true,
+        boxTraceCode: true,
+        palletTraceCode: true,
+        inboundAt: true,
+        freezeReason: true,
         updatedAt: true,
         batch: {
           select: {
@@ -251,10 +330,73 @@ export async function buildInventorySummary(filters: InventoryFilters = {}): Pro
         ...movementWhere,
         movementType: StockMovementType.OUTBOUND
       }
+    }),
+    prisma.warehouseLocation.findMany({
+      where: {
+        ...(warehouseId ? { warehouseId } : {})
+      },
+      orderBy: [{ warehouseId: "asc" }, { zone: "asc" }, { locationCode: "asc" }],
+      select: {
+        id: true,
+        warehouseId: true,
+        locationCode: true,
+        zone: true,
+        capacity: true
+      }
+    }),
+    prisma.stocktakeOrder.findMany({
+      where: {
+        ...(batchId ? { batchId } : {}),
+        ...(contractId ? { contractId } : {}),
+        ...(warehouseId ? { warehouseId } : {})
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      take: 8,
+      select: {
+        id: true,
+        stocktakeNo: true,
+        status: true,
+        batchId: true,
+        warehouseId: true,
+        plannedQuantity: true,
+        actualQuantity: true,
+        differenceQuantity: true,
+        operatorName: true,
+        createdAt: true,
+        completedAt: true,
+        batch: {
+          select: {
+            batchNo: true
+          }
+        }
+      }
     })
   ]);
 
   const summary = createEmptyMetrics();
+  const now = new Date();
+  const hierarchySummary = {
+    unitCount: 0,
+    boxCount: 0,
+    palletCount: 0
+  };
+  const ageBuckets = createAgeBuckets();
+  const unitCodeSet = new Set<string>();
+  const boxCodeSet = new Set<string>();
+  const palletCodeSet = new Set<string>();
+  const freezeReasonMap = new Map<string, number>();
+  const locationMap = new Map<
+    string,
+    {
+      locationId: string;
+      warehouseId: string | null;
+      locationCode: string;
+      zone: string | null;
+      capacity: number | null;
+      occupiedQuantity: number;
+      frozenQuantity: number;
+    }
+  >();
   const batchMap = new Map<
     string,
     {
@@ -297,8 +439,50 @@ export async function buildInventorySummary(filters: InventoryFilters = {}): Pro
     }
   >();
 
+  for (const location of locations) {
+    locationMap.set(location.id, {
+      locationId: location.id,
+      warehouseId: location.warehouseId,
+      locationCode: location.locationCode,
+      zone: location.zone,
+      capacity: location.capacity,
+      occupiedQuantity: 0,
+      frozenQuantity: 0
+    });
+  }
+
   for (const qrItem of qrItems) {
     addQrStatus(summary, qrItem.status);
+
+    if (qrItem.unitTraceCode) {
+      unitCodeSet.add(qrItem.unitTraceCode);
+    }
+
+    if (qrItem.boxTraceCode) {
+      boxCodeSet.add(qrItem.boxTraceCode);
+    }
+
+    if (qrItem.palletTraceCode) {
+      palletCodeSet.add(qrItem.palletTraceCode);
+    }
+
+    if (qrItem.status === QrItemStatus.IN_STOCK || qrItem.status === QrItemStatus.FROZEN) {
+      addAgeBucket(ageBuckets, qrItem.inboundAt, now);
+
+      if (qrItem.locationId && locationMap.has(qrItem.locationId)) {
+        const locationEntry = locationMap.get(qrItem.locationId)!;
+        locationEntry.occupiedQuantity += 1;
+
+        if (qrItem.status === QrItemStatus.FROZEN) {
+          locationEntry.frozenQuantity += 1;
+        }
+      }
+    }
+
+    if (qrItem.status === QrItemStatus.FROZEN) {
+      const reason = qrItem.freezeReason?.trim() || "未填写冻结原因";
+      freezeReasonMap.set(reason, (freezeReasonMap.get(reason) ?? 0) + 1);
+    }
 
     const batch = qrItem.batch;
     const contract = batch.contract;
@@ -368,6 +552,10 @@ export async function buildInventorySummary(filters: InventoryFilters = {}): Pro
     warehouseMap.set(warehouseKey, warehouseEntry);
   }
 
+  hierarchySummary.unitCount = unitCodeSet.size;
+  hierarchySummary.boxCount = boxCodeSet.size;
+  hierarchySummary.palletCount = palletCodeSet.size;
+
   return {
     generatedAt: new Date().toISOString(),
     filters: {
@@ -388,6 +576,36 @@ export async function buildInventorySummary(filters: InventoryFilters = {}): Pro
         summary.inTransitInventory + summary.realtimeInventory + summary.outboundQuantity + summary.abnormalQuantity ===
         summary.totalQrItems
     },
+    hierarchySummary,
+    ageBuckets,
+    locationUtilization: [...locationMap.values()]
+      .map((entry) => ({
+        ...entry,
+        availableCapacity: entry.capacity !== null ? Math.max(entry.capacity - entry.occupiedQuantity, 0) : null,
+        utilizationPercent:
+          entry.capacity && entry.capacity > 0
+            ? Number(((entry.occupiedQuantity / entry.capacity) * 100).toFixed(1))
+            : null
+      }))
+      .sort((left, right) => left.locationCode.localeCompare(right.locationCode, "zh-CN")),
+    freezeReasons: [...freezeReasonMap.entries()]
+      .map(([reason, quantity]) => ({ reason, quantity }))
+      .sort((left, right) => right.quantity - left.quantity),
+    stocktakes: stocktakeOrders.map((item) => ({
+      id: item.id,
+      stocktakeNo: item.stocktakeNo,
+      status: item.status,
+      batchId: item.batchId,
+      batchNo: item.batch?.batchNo ?? "-",
+      warehouseId: item.warehouseId,
+      warehouseName: qrItems.find((qr) => qr.warehouseId === item.warehouseId)?.currentWarehouse ?? "未分配仓库",
+      plannedQuantity: item.plannedQuantity,
+      actualQuantity: item.actualQuantity,
+      differenceQuantity: item.differenceQuantity,
+      operatorName: item.operatorName,
+      createdAt: item.createdAt,
+      completedAt: item.completedAt
+    })),
     byBatch: [...batchMap.values()]
       .sort((left, right) => right.latestStatusChangedAt.getTime() - left.latestStatusChangedAt.getTime())
       .map((entry) => ({

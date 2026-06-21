@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { routeMenuEntries, routeMenuItems, routeMetaByPath } from "../routes/routeMeta";
 import { AiAssistantPanel } from "./AiAssistantPanel";
+import { isCustomerDemo } from "../lib/runtime";
 
 const { Header, Content, Sider } = Layout;
 const { useBreakpoint } = Grid;
@@ -70,11 +71,23 @@ export function AppLayout() {
 
           <div className="app-header-panel">
             <span className="app-header-panel-label">当前演示版本</span>
-            <span className="app-header-panel-value">13 项侧栏模块 + 全局 AI 助手入口已启用</span>
+            <span className="app-header-panel-value">
+              {isCustomerDemo ? "客户演示包 · 即开即测" : "14 项侧栏模块 + 全局 AI 助手入口已启用"}
+            </span>
             <Space wrap>
-              <Tag color="processing">React + Vite</Tag>
-              <Tag color="success">SQLite + Prisma</Tag>
-              <Tag color="warning">双击 BAT 预览</Tag>
+              {isCustomerDemo ? (
+                <>
+                  <Tag color="processing">客户演示包</Tag>
+                  <Tag color="success">双击启动</Tag>
+                  <Tag color="warning">本地测试</Tag>
+                </>
+              ) : (
+                <>
+                  <Tag color="processing">React + Vite</Tag>
+                  <Tag color="success">SQLite + Prisma</Tag>
+                  <Tag color="warning">双击 BAT 预览</Tag>
+                </>
+              )}
             </Space>
           </div>
         </Header>

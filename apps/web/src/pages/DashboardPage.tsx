@@ -30,6 +30,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { requestJson } from "../lib/api";
+import { isCustomerDemo } from "../lib/runtime";
 
 type DashboardTone = "success" | "processing" | "warning" | "default" | "error";
 type DashboardOrderView = "active" | "completed" | "after_sales" | "exception" | "archived" | "all";
@@ -955,19 +956,21 @@ export function DashboardPage() {
                   description={`运行来源：${data.assistant.source}。即使升级版 AI 调用失败，也会自动回退到模板回答。`}
                 />
 
-                <Space wrap>
-                  <Button
-                    type="primary"
-                    icon={<CheckCircleOutlined />}
-                    href="http://127.0.0.1:3001/api/setup/status"
-                    target="_blank"
-                  >
-                    查看系统状态
-                  </Button>
-                  <Button href="http://127.0.0.1:3001/api/health" target="_blank">
-                    查看服务状态
-                  </Button>
-                </Space>
+                {!isCustomerDemo ? (
+                  <Space wrap>
+                    <Button
+                      type="primary"
+                      icon={<CheckCircleOutlined />}
+                      href="http://127.0.0.1:3001/api/setup/status"
+                      target="_blank"
+                    >
+                      查看系统状态
+                    </Button>
+                    <Button href="http://127.0.0.1:3001/api/health" target="_blank">
+                      查看服务状态
+                    </Button>
+                  </Space>
+                ) : null}
               </Space>
             ) : (
               <Skeleton active paragraph={{ rows: 6 }} />
@@ -997,7 +1000,7 @@ export function DashboardPage() {
             message="这会回到空白演示起点"
             description={
               setupStatus
-                ? `将先清空当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片。重置后系统只保留标准场景参数与基础底座，不再自动生成单据、合同、批次和库存；请从 pics 目录手动上传默认图片开始演示。`
+                ? `将先清空当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片。重置后系统只保留标准场景参数与基础底座，不再自动生成单据、合同、批次和库存；请从客户包内附带的测试资料重新开始演示。`
                 : "将先清空当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片，然后回到空白演示起点。"
             }
           />
@@ -1024,7 +1027,7 @@ export function DashboardPage() {
                   key: "result",
                   label: "重置后状态",
                   children:
-                    "回到“默认无单据、无合同、无批次、无二维码、无库存，由用户手动上传 pics 目录素材开始”的空白演示状态。"
+                    "回到“默认无单据、无合同、无批次、无二维码、无库存，由用户手动上传测试资料开始”的空白演示状态。"
                 }
               ]}
             />

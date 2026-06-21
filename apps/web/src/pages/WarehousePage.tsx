@@ -7,6 +7,7 @@ import {
   Descriptions,
   Empty,
   Input,
+  InputNumber,
   List,
   Modal,
   Row,
@@ -16,6 +17,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Typography,
   message
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -43,6 +45,18 @@ type WarehouseContext = {
     orderNo: string;
     type: string;
     status: string;
+    appointmentNo: string | null;
+    appointmentTime: string | null;
+    waveNo: string | null;
+    dockNo: string | null;
+    arrivalStatus: string | null;
+    pickupListNo: string | null;
+    reviewStatus: string | null;
+    firstReviewerName: string | null;
+    firstReviewedAt: string | null;
+    secondReviewerName: string | null;
+    secondReviewedAt: string | null;
+    pickingStatus: string | null;
   };
   batch: {
     id: string;
@@ -84,6 +98,11 @@ type WarehouseContext = {
     damaged: number;
     lost: number;
     frozen: number;
+  };
+  hierarchySummary: {
+    unitCount: number;
+    boxCount: number;
+    palletCount: number;
   };
   locations: Array<{
     id: string;
@@ -170,6 +189,65 @@ type ExceptionRecord = {
   createdAt: string;
 };
 
+type WarehouseQrRecord = {
+  id: string;
+  qrCode: string;
+  serialNo: number;
+  status: string;
+  unitTraceCode: string | null;
+  boxTraceCode: string | null;
+  palletTraceCode: string | null;
+  freezeReason: string | null;
+  statusRemark: string | null;
+  productName: string | null;
+  currentWarehouse: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type WarehouseAnomalyRow = {
+  id: string;
+  anomalyNo: string;
+  mode: "INBOUND" | "OUTBOUND" | "INVENTORY";
+  anomalyType: string;
+  batchId: string | null;
+  batchNo: string;
+  contractId: string | null;
+  contractNo: string;
+  warehouseId: string | null;
+  warehouseName: string;
+  relatedOrderId: string | null;
+  relatedOrderNo: string | null;
+  qrCode: string | null;
+  quantity: number;
+  description: string | null;
+  status: string;
+  reportedByName: string | null;
+  handledByName: string | null;
+  reportedAt: string;
+  handledAt: string | null;
+};
+
+type WarehouseStocktakeRow = {
+  id: string;
+  stocktakeNo: string;
+  warehouseId: string | null;
+  warehouseName: string;
+  batchId: string | null;
+  batchNo: string;
+  contractId: string | null;
+  contractNo: string;
+  status: string;
+  plannedQuantity: number;
+  actualQuantity: number;
+  differenceQuantity: number;
+  note: string | null;
+  operatorName: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+};
+
 type WarehouseWorkbenchResponse = {
   generatedAt: string;
   focus: {
@@ -193,10 +271,14 @@ type WarehouseWorkbenchResponse = {
     inStockQrCount: number;
     outboundQrCount: number;
     frozenQrCount: number;
+    openAnomalyCount: number;
+    stocktakePendingCount: number;
     warehouseCount: number;
   };
   preReceiveOrders: PreReceiveRow[];
   outboundOrders: OutboundRow[];
+  anomalies: WarehouseAnomalyRow[];
+  stocktakes: WarehouseStocktakeRow[];
   locationSnapshots: Array<{
     id: string;
     warehouseId: string | null;
@@ -213,7 +295,12 @@ type WarehouseWorkbenchResponse = {
 type PreReceiveRow = {
   id: string;
   preReceiveNo: string;
+  appointmentNo: string | null;
+  appointmentTime: string | null;
   expectedArrivalTime: string | null;
+  waveNo: string | null;
+  dockNo: string | null;
+  arrivalStatus: string | null;
   skuName: string;
   quantity: number;
   unit: string;
@@ -245,6 +332,14 @@ type OutboundRow = {
   id: string;
   outboundNo: string;
   status: string;
+  waveNo: string | null;
+  pickupListNo: string | null;
+  reviewStatus: string | null;
+  firstReviewerName: string | null;
+  firstReviewedAt: string | null;
+  secondReviewerName: string | null;
+  secondReviewedAt: string | null;
+  pickingStatus: string | null;
   quantity: number;
   unit: string;
   batchId: string | null;
@@ -274,6 +369,39 @@ type OutboundRow = {
     lost: number;
   };
   updatedAt: string;
+};
+
+type WarehouseWorkbenchEnvelope = {
+  workbench: WarehouseWorkbenchResponse;
+};
+
+type InventoryEnvelope = {
+  inventory: InventorySummaryResponse;
+};
+
+const anomalyModeOptions = [
+  { label: "入库异常", value: "INBOUND" },
+  { label: "出库异常", value: "OUTBOUND" },
+  { label: "库存异常", value: "INVENTORY" }
+] as const;
+
+const anomalyTypeOptions = [
+  { label: "错货", value: "WRONG_GOODS" },
+  { label: "漏扫", value: "MISSING_SCAN" },
+  { label: "多扫", value: "EXTRA_SCAN" },
+  { label: "破损", value: "DAMAGED" },
+  { label: "少件", value: "SHORTAGE" },
+  { label: "多件", value: "OVERAGE" },
+  { label: "错批次", value: "WRONG_BATCH" },
+  { label: "错任务", value: "WRONG_TASK" }
+] as const;
+
+const defaultAnomalyDraft = {
+  mode: "INBOUND" as WarehouseAnomalyRow["mode"],
+  anomalyType: "WRONG_GOODS",
+  quantity: 1,
+  qrCode: "",
+  description: ""
 };
 
 const qrStatusColorMap: Record<string, string> = {
@@ -357,6 +485,16 @@ export function WarehousePage() {
   const [isWorkbenchLoading, setIsWorkbenchLoading] = useState(false);
   const [selectedPreReceiveId, setSelectedPreReceiveId] = useState<string | null>(null);
   const [selectedOutboundId, setSelectedOutboundId] = useState<string | null>(null);
+  const [focusQrItems, setFocusQrItems] = useState<WarehouseQrRecord[]>([]);
+  const [isFocusQrItemsLoading, setIsFocusQrItemsLoading] = useState(false);
+  const [selectedQrItemId, setSelectedQrItemId] = useState<string | null>(null);
+  const [isAnomalyModalOpen, setIsAnomalyModalOpen] = useState(false);
+  const [isSubmittingAnomaly, setIsSubmittingAnomaly] = useState(false);
+  const [anomalyDraft, setAnomalyDraft] = useState({ ...defaultAnomalyDraft });
+  const [stocktakeActualQuantity, setStocktakeActualQuantity] = useState<number | null>(null);
+  const [stocktakeNote, setStocktakeNote] = useState("");
+  const [isStocktakeSubmitting, setIsStocktakeSubmitting] = useState(false);
+  const [selectedStocktakeId, setSelectedStocktakeId] = useState<string | null>(null);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerRegionId = "warehouse-camera-scanner";
@@ -383,6 +521,16 @@ export function WarehousePage() {
   const focusLocations = useMemo(
     () => (workbench?.locationSnapshots ?? []).filter((item) => item.isFocusWarehouse),
     [workbench]
+  );
+
+  const selectedFocusQrItem = useMemo(
+    () => focusQrItems.find((item) => item.id === selectedQrItemId) ?? focusQrItems[0] ?? null,
+    [focusQrItems, selectedQrItemId]
+  );
+
+  const selectedWorkbenchStocktake = useMemo(
+    () => workbench?.stocktakes.find((item) => item.id === selectedStocktakeId) ?? null,
+    [workbench, selectedStocktakeId]
   );
 
   const locationOptions = useMemo(
@@ -426,6 +574,19 @@ export function WarehousePage() {
       )
     },
     {
+      title: "预约 / 波次 / 月台",
+      key: "appointment",
+      width: 220,
+      render: (_, record) => (
+        <div>
+          <div>{record.appointmentNo ?? "-"}</div>
+          <div className="documents-secondary-text">
+            {record.waveNo ?? "-"} · {record.dockNo ?? "-"}
+          </div>
+        </div>
+      )
+    },
+    {
       title: "预计到仓",
       dataIndex: "expectedArrivalTime",
       width: 180,
@@ -442,6 +603,12 @@ export function WarehousePage() {
       dataIndex: "status",
       width: 120,
       render: (value: string) => <Tag color={getStatusColor(value)}>{value}</Tag>
+    },
+    {
+      title: "到仓状态",
+      dataIndex: "arrivalStatus",
+      width: 120,
+      render: (value: string | null) => <Tag color={getStatusColor(value)}>{value ?? "-"}</Tag>
     }
   ];
 
@@ -488,6 +655,17 @@ export function WarehousePage() {
       )
     },
     {
+      title: "波次 / 提货清单",
+      key: "wave",
+      width: 220,
+      render: (_, record) => (
+        <div>
+          <div>{record.waveNo ?? "-"}</div>
+          <div className="documents-secondary-text">{record.pickupListNo ?? "-"}</div>
+        </div>
+      )
+    },
+    {
       title: "在库可扫",
       dataIndex: "inStockAvailable",
       width: 110
@@ -497,6 +675,12 @@ export function WarehousePage() {
       dataIndex: "status",
       width: 120,
       render: (value: string) => <Tag color={getStatusColor(value)}>{value}</Tag>
+    },
+    {
+      title: "复核",
+      key: "reviewStatus",
+      width: 150,
+      render: (_, record) => <Tag color={getStatusColor(record.reviewStatus)}>{record.reviewStatus ?? "-"}</Tag>
     }
   ];
 
@@ -555,6 +739,113 @@ export function WarehousePage() {
     }
   ];
 
+  const focusQrColumns: ColumnsType<WarehouseQrRecord> = [
+    {
+      title: "二维码",
+      dataIndex: "qrCode",
+      width: 220
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 120,
+      render: (value: string) => <Tag color={qrStatusColorMap[value] ?? "default"}>{value}</Tag>
+    },
+    {
+      title: "箱码 / 托盘码",
+      key: "trace",
+      width: 260,
+      render: (_, record) => (
+        <div>
+          <div>{record.boxTraceCode ?? "-"}</div>
+          <div className="documents-secondary-text">{record.palletTraceCode ?? "-"}</div>
+        </div>
+      )
+    },
+    {
+      title: "冻结原因 / 备注",
+      key: "freeze",
+      render: (_, record) => record.freezeReason ?? record.statusRemark ?? "-"
+    }
+  ];
+
+  const anomalyColumns: ColumnsType<WarehouseAnomalyRow> = [
+    {
+      title: "异常单号",
+      dataIndex: "anomalyNo",
+      width: 180
+    },
+    {
+      title: "类型",
+      key: "type",
+      width: 200,
+      render: (_, record) => (
+        <div>
+          <div>{record.mode}</div>
+          <div className="documents-secondary-text">{record.anomalyType}</div>
+        </div>
+      )
+    },
+    {
+      title: "关联合同 / 批次",
+      key: "business",
+      width: 220,
+      render: (_, record) => (
+        <div>
+          <div>{record.contractNo}</div>
+          <div className="documents-secondary-text">{record.batchNo}</div>
+        </div>
+      )
+    },
+    {
+      title: "异常说明",
+      dataIndex: "description"
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 120,
+      render: (value: string) => <Tag color={getStatusColor(value)}>{value}</Tag>
+    }
+  ];
+
+  const workbenchStocktakeColumns: ColumnsType<WarehouseStocktakeRow> = [
+    {
+      title: "盘点单号",
+      dataIndex: "stocktakeNo",
+      width: 180
+    },
+    {
+      title: "批次 / 仓库",
+      key: "scope",
+      width: 220,
+      render: (_, record) => (
+        <div>
+          <div>{record.batchNo}</div>
+          <div className="documents-secondary-text">{record.warehouseName}</div>
+        </div>
+      )
+    },
+    {
+      title: "计划 / 实盘 / 差异",
+      key: "count",
+      width: 180,
+      render: (_, record) => `${record.plannedQuantity} / ${record.actualQuantity} / ${record.differenceQuantity}`
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 120,
+      render: (value: string) => <Tag color={getStatusColor(value)}>{value}</Tag>
+    },
+    {
+      title: "完成时间",
+      dataIndex: "completedAt",
+      width: 180,
+      render: (value: string | null) => formatDateTime(value)
+    }
+  ];
+
   async function loadInventorySummary() {
     setIsInventoryLoading(true);
 
@@ -579,6 +870,30 @@ export function WarehousePage() {
       message.error(error instanceof Error ? error.message : "加载仓储工作台失败。");
     } finally {
       setIsWorkbenchLoading(false);
+    }
+  }
+
+  async function loadFocusQrItems(batchId?: string) {
+    setIsFocusQrItemsLoading(true);
+
+    try {
+      const resolvedBatchId = batchId ?? currentContext?.batch.id ?? workbench?.focus.batchId ?? null;
+
+      if (!resolvedBatchId) {
+        setFocusQrItems([]);
+        setSelectedQrItemId(null);
+        return;
+      }
+
+      const items = await requestJson<WarehouseQrRecord[]>(
+        `/api/qr-items?batchId=${encodeURIComponent(resolvedBatchId)}`
+      );
+      setFocusQrItems(items);
+      setSelectedQrItemId((previous) => previous ?? items[0]?.id ?? null);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "加载批次二维码失败。");
+    } finally {
+      setIsFocusQrItemsLoading(false);
     }
   }
 
@@ -617,8 +932,193 @@ export function WarehousePage() {
       loadContext("INBOUND", batchId),
       loadContext("OUTBOUND", batchId),
       loadInventorySummary(),
-      loadWarehouseWorkbench(batchId)
+      loadWarehouseWorkbench(batchId),
+      loadFocusQrItems(batchId)
     ]);
+  }
+
+  async function reportAnomaly() {
+    const focusBatchId = currentContext?.batch.id ?? workbench?.focus.batchId ?? null;
+    const focusContractId = currentContext?.contract.id ?? workbench?.focus.contractId ?? null;
+    const focusWarehouseId = currentContext?.warehouse.id ?? workbench?.focus.warehouseId ?? null;
+    const relatedOrderId = currentContext?.task.id ?? null;
+    const relatedOrderNo = currentContext?.task.taskNo ?? null;
+
+    if (!focusBatchId || !focusContractId || !focusWarehouseId) {
+      message.warning("当前缺少仓储上下文，暂时无法上报异常。");
+      return;
+    }
+
+    setIsSubmittingAnomaly(true);
+
+    try {
+      const result = await requestJson<WarehouseWorkbenchEnvelope>("/api/warehouse/anomalies", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          mode: anomalyDraft.mode,
+          anomalyType: anomalyDraft.anomalyType,
+          batchId: focusBatchId,
+          contractId: focusContractId,
+          warehouseId: focusWarehouseId,
+          relatedOrderId,
+          relatedOrderNo,
+          qrCode: anomalyDraft.qrCode.trim() || undefined,
+          quantity: anomalyDraft.quantity,
+          description: anomalyDraft.description.trim() || undefined
+        })
+      });
+
+      setWorkbench(result.workbench);
+      setIsAnomalyModalOpen(false);
+      setAnomalyDraft({ ...defaultAnomalyDraft });
+      message.success("仓储异常已上报。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "上报仓储异常失败。");
+    } finally {
+      setIsSubmittingAnomaly(false);
+    }
+  }
+
+  async function handleAnomaly(anomalyId: string) {
+    try {
+      const result = await requestJson<WarehouseWorkbenchEnvelope>(`/api/warehouse/anomalies/${anomalyId}/handle`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          status: "RESOLVED",
+          resolution: "已在工作台中人工处理并关闭。"
+        })
+      });
+
+      setWorkbench(result.workbench);
+      message.success("异常已处理。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "处理异常失败。");
+    }
+  }
+
+  async function toggleFreezeQrItem(qrItemId: string, nextAction: "freeze" | "unfreeze") {
+    try {
+      const result = await requestJson<WarehouseWorkbenchEnvelope & InventoryEnvelope>(
+        `/api/warehouse/qr-items/${qrItemId}/${nextAction}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body:
+            nextAction === "freeze"
+              ? JSON.stringify({
+                  reason: "阶段23演示冻结",
+                  remark: "仓储执行深化演示：人工冻结库存"
+                })
+              : JSON.stringify({
+                  remark: "仓储执行深化演示：人工解冻库存"
+                })
+        }
+      );
+
+      setWorkbench(result.workbench);
+      setInventorySummary(result.inventory);
+      await loadFocusQrItems(currentContext?.batch.id ?? workbench?.focus.batchId);
+      message.success(nextAction === "freeze" ? "二维码已冻结。" : "二维码已解冻。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "切换二维码冻结状态失败。");
+    }
+  }
+
+  async function createStocktake() {
+    const focusBatchId = currentContext?.batch.id ?? workbench?.focus.batchId ?? null;
+    const focusContractId = currentContext?.contract.id ?? workbench?.focus.contractId ?? null;
+    const focusWarehouseId = currentContext?.warehouse.id ?? workbench?.focus.warehouseId ?? null;
+
+    if (!focusBatchId || !focusContractId || !focusWarehouseId) {
+      message.warning("当前缺少盘点所需的批次、合同或仓库上下文。");
+      return;
+    }
+
+    setIsStocktakeSubmitting(true);
+
+    try {
+      const result = await requestJson<WarehouseWorkbenchEnvelope & InventoryEnvelope>("/api/warehouse/stocktakes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          batchId: focusBatchId,
+          contractId: focusContractId,
+          warehouseId: focusWarehouseId,
+          note: stocktakeNote.trim() || "阶段23演示盘点任务"
+        })
+      });
+
+      setWorkbench(result.workbench);
+      setInventorySummary(result.inventory);
+      setStocktakeNote("");
+      message.success("盘点任务已创建。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "创建盘点任务失败。");
+    } finally {
+      setIsStocktakeSubmitting(false);
+    }
+  }
+
+  async function completeStocktake(stocktakeId: string) {
+    if (stocktakeActualQuantity === null) {
+      message.warning("请先填写实际盘点数量。");
+      return;
+    }
+
+    setIsStocktakeSubmitting(true);
+
+    try {
+      const result = await requestJson<WarehouseWorkbenchEnvelope & InventoryEnvelope>(
+        `/api/warehouse/stocktakes/${stocktakeId}/complete`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            actualQuantity: stocktakeActualQuantity,
+            note: stocktakeNote.trim() || "阶段23演示盘点完成"
+          })
+        }
+      );
+
+      setWorkbench(result.workbench);
+      setInventorySummary(result.inventory);
+      setStocktakeActualQuantity(null);
+      setStocktakeNote("");
+      setSelectedStocktakeId(null);
+      message.success("盘点任务已完成。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "完成盘点任务失败。");
+    } finally {
+      setIsStocktakeSubmitting(false);
+    }
+  }
+
+  async function advanceReview(outboundOrderId: string, reviewStep: "first" | "second") {
+    try {
+      const result = await requestJson<WarehouseWorkbenchEnvelope>(
+        `/api/warehouse/outbound-orders/${outboundOrderId}/${reviewStep}-review`,
+        {
+          method: "POST"
+        }
+      );
+
+      setWorkbench(result.workbench);
+      message.success(reviewStep === "first" ? "出库一审已完成。" : "出库二审已完成。");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "推进出库复核失败。");
+    }
   }
 
   function pushExceptionRecord(qrCode: string, errorMessage: string, operationMode: ScanMode) {
@@ -962,6 +1462,37 @@ export function WarehousePage() {
                   <Descriptions.Item label="合同号">{operationContext.contract.contractNo}</Descriptions.Item>
                   <Descriptions.Item label="仓库">{operationContext.warehouse.name}</Descriptions.Item>
                   <Descriptions.Item label="货物">{operationContext.batch.productName}</Descriptions.Item>
+                  {operationMode === "INBOUND" ? (
+                    <>
+                      <Descriptions.Item label="预约号">{operationContext.task.appointmentNo ?? "-"}</Descriptions.Item>
+                      <Descriptions.Item label="预约时间">
+                        {formatDateTime(operationContext.task.appointmentTime)}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="波次 / 月台">
+                        {(operationContext.task.waveNo ?? "-") + " / " + (operationContext.task.dockNo ?? "-")}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="到仓状态">
+                        <Tag color={getStatusColor(operationContext.task.arrivalStatus)}>
+                          {operationContext.task.arrivalStatus ?? "-"}
+                        </Tag>
+                      </Descriptions.Item>
+                    </>
+                  ) : (
+                    <>
+                      <Descriptions.Item label="波次号">{operationContext.task.waveNo ?? "-"}</Descriptions.Item>
+                      <Descriptions.Item label="提货清单">{operationContext.task.pickupListNo ?? "-"}</Descriptions.Item>
+                      <Descriptions.Item label="复核状态">
+                        <Tag color={getStatusColor(operationContext.task.reviewStatus)}>
+                          {operationContext.task.reviewStatus ?? "-"}
+                        </Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="拣货状态">
+                        <Tag color={getStatusColor(operationContext.task.pickingStatus)}>
+                          {operationContext.task.pickingStatus ?? "-"}
+                        </Tag>
+                      </Descriptions.Item>
+                    </>
+                  )}
                   <Descriptions.Item label="状态">
                     <Tag color={getStatusColor(operationContext.task.status)}>{operationContext.task.status}</Tag>
                   </Descriptions.Item>
@@ -1235,6 +1766,12 @@ export function WarehousePage() {
           <Statistic title="已出库二维码" value={workbench?.summary.outboundQrCount ?? 0} suffix="个码" />
         </Card>
         <Card className="stat-card">
+          <Statistic title="未处理异常" value={workbench?.summary.openAnomalyCount ?? 0} suffix="条" />
+        </Card>
+        <Card className="stat-card">
+          <Statistic title="未完成盘点" value={workbench?.summary.stocktakePendingCount ?? 0} suffix="单" />
+        </Card>
+        <Card className="stat-card">
           <Statistic title="仓库数" value={workbench?.summary.warehouseCount ?? 0} suffix="个" />
         </Card>
       </div>
@@ -1297,6 +1834,18 @@ export function WarehousePage() {
                             <Descriptions.Item label="预收货单号">{selectedPreReceive.preReceiveNo}</Descriptions.Item>
                             <Descriptions.Item label="关联合同">{selectedPreReceive.contractNo}</Descriptions.Item>
                             <Descriptions.Item label="关联批次">{selectedPreReceive.batchNo}</Descriptions.Item>
+                            <Descriptions.Item label="预约号">{selectedPreReceive.appointmentNo ?? "-"}</Descriptions.Item>
+                            <Descriptions.Item label="预约时间">
+                              {formatDateTime(selectedPreReceive.appointmentTime)}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="波次 / 月台">
+                              {(selectedPreReceive.waveNo ?? "-") + " / " + (selectedPreReceive.dockNo ?? "-")}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="到仓状态">
+                              <Tag color={getStatusColor(selectedPreReceive.arrivalStatus)}>
+                                {selectedPreReceive.arrivalStatus ?? "-"}
+                              </Tag>
+                            </Descriptions.Item>
                             <Descriptions.Item label="预收货状态">
                               <Tag color={getStatusColor(selectedPreReceive.status)}>{selectedPreReceive.status}</Tag>
                             </Descriptions.Item>
@@ -1383,6 +1932,167 @@ export function WarehousePage() {
                     </Row>
                   </Card>
 
+                  <Row gutter={[20, 20]}>
+                    <Col xs={24} xl={10}>
+                      <Card
+                        className="placeholder-card warehouse-section-card"
+                        title="多级二维码与冻结控制"
+                        extra={
+                          <Button
+                            icon={<ReloadOutlined />}
+                            onClick={() => void loadFocusQrItems(currentContext?.batch.id ?? workbench?.focus.batchId)}
+                            loading={isFocusQrItemsLoading}
+                          >
+                            刷新二维码
+                          </Button>
+                        }
+                      >
+                        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                          <Alert
+                            type="info"
+                            showIcon
+                            message="阶段 23：最小包装码 / 箱码 / 托盘码"
+                            description={`当前聚焦批次已形成 ${currentContext?.hierarchySummary.unitCount ?? 0} 个最小包装码、${currentContext?.hierarchySummary.boxCount ?? 0} 个箱码、${currentContext?.hierarchySummary.palletCount ?? 0} 个托盘码。`}
+                          />
+                          <Table
+                            rowKey="id"
+                            size="small"
+                            pagination={{ pageSize: 5, hideOnSinglePage: true }}
+                            columns={focusQrColumns}
+                            dataSource={focusQrItems}
+                            loading={isFocusQrItemsLoading}
+                            rowClassName={(record) =>
+                              record.id === selectedFocusQrItem?.id ? "inventory-table-row-active" : ""
+                            }
+                            onRow={(record) => ({
+                              onClick: () => setSelectedQrItemId(record.id)
+                            })}
+                            locale={{ emptyText: "当前批次还没有可展示的二维码。" }}
+                            scroll={{ x: 860 }}
+                          />
+                          {selectedFocusQrItem ? (
+                            <Card size="small" className="placeholder-card" title="当前选中二维码">
+                              <Space direction="vertical" size="small" style={{ width: "100%" }}>
+                                <Typography.Text strong>{selectedFocusQrItem.qrCode}</Typography.Text>
+                                <Typography.Text type="secondary">
+                                  {selectedFocusQrItem.unitTraceCode ?? "-"}
+                                </Typography.Text>
+                                <Typography.Text type="secondary">
+                                  {selectedFocusQrItem.boxTraceCode ?? "-"} / {selectedFocusQrItem.palletTraceCode ?? "-"}
+                                </Typography.Text>
+                                <Space wrap>
+                                  <Tag color={qrStatusColorMap[selectedFocusQrItem.status] ?? "default"}>
+                                    {selectedFocusQrItem.status}
+                                  </Tag>
+                                  {selectedFocusQrItem.freezeReason ? (
+                                    <Tag color="warning">{selectedFocusQrItem.freezeReason}</Tag>
+                                  ) : null}
+                                </Space>
+                                <Space wrap>
+                                  {selectedFocusQrItem.status === "IN_STOCK" ? (
+                                    <Button onClick={() => void toggleFreezeQrItem(selectedFocusQrItem.id, "freeze")}>
+                                      冻结库存
+                                    </Button>
+                                  ) : null}
+                                  {selectedFocusQrItem.status === "FROZEN" ? (
+                                    <Button onClick={() => void toggleFreezeQrItem(selectedFocusQrItem.id, "unfreeze")}>
+                                      解冻库存
+                                    </Button>
+                                  ) : null}
+                                </Space>
+                              </Space>
+                            </Card>
+                          ) : null}
+                        </Space>
+                      </Card>
+                    </Col>
+
+                    <Col xs={24} xl={14}>
+                      <Card
+                        className="placeholder-card warehouse-section-card"
+                        title="异常与盘点执行"
+                        extra={
+                          <Space wrap>
+                            <Button onClick={() => setIsAnomalyModalOpen(true)}>上报异常</Button>
+                            <Button type="primary" loading={isStocktakeSubmitting} onClick={() => void createStocktake()}>
+                              创建盘点
+                            </Button>
+                          </Space>
+                        }
+                      >
+                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                          <Card size="small" className="placeholder-card" title="仓储异常记录">
+                            <Table
+                              rowKey="id"
+                              size="small"
+                              pagination={{ pageSize: 4, hideOnSinglePage: true }}
+                              columns={anomalyColumns}
+                              dataSource={workbench?.anomalies ?? []}
+                              locale={{ emptyText: "当前还没有仓储异常。" }}
+                              scroll={{ x: 980 }}
+                            />
+                            {(workbench?.anomalies ?? []).length > 0 ? (
+                              <Space wrap style={{ marginTop: 12 }}>
+                                {(workbench?.anomalies ?? [])
+                                  .filter((item) => item.status === "OPEN")
+                                  .slice(0, 3)
+                                  .map((item) => (
+                                    <Button key={item.id} onClick={() => void handleAnomaly(item.id)}>
+                                      处理 {item.anomalyNo}
+                                    </Button>
+                                  ))}
+                              </Space>
+                            ) : null}
+                          </Card>
+
+                          <Card size="small" className="placeholder-card" title="盘点任务">
+                            <Table
+                              rowKey="id"
+                              size="small"
+                              pagination={{ pageSize: 4, hideOnSinglePage: true }}
+                              columns={workbenchStocktakeColumns}
+                              dataSource={workbench?.stocktakes ?? []}
+                              locale={{ emptyText: "当前还没有盘点任务。" }}
+                              rowClassName={(record) =>
+                                record.id === selectedWorkbenchStocktake?.id ? "inventory-table-row-active" : ""
+                              }
+                              onRow={(record) => ({
+                                onClick: () => setSelectedStocktakeId(record.id)
+                              })}
+                              scroll={{ x: 940 }}
+                            />
+                            <Space wrap style={{ marginTop: 12 }}>
+                              <InputNumber
+                                min={0}
+                                placeholder="实际盘点数量"
+                                value={stocktakeActualQuantity ?? undefined}
+                                onChange={(value) => setStocktakeActualQuantity(typeof value === "number" ? value : null)}
+                              />
+                              <Input
+                                style={{ width: 260 }}
+                                placeholder="盘点备注"
+                                value={stocktakeNote}
+                                onChange={(event) => setStocktakeNote(event.target.value)}
+                              />
+                              <Button
+                                type="primary"
+                                disabled={!selectedWorkbenchStocktake || selectedWorkbenchStocktake.status === "COMPLETED"}
+                                loading={isStocktakeSubmitting}
+                                onClick={() =>
+                                  selectedWorkbenchStocktake
+                                    ? void completeStocktake(selectedWorkbenchStocktake.id)
+                                    : undefined
+                                }
+                              >
+                                完成所选盘点
+                              </Button>
+                            </Space>
+                          </Card>
+                        </Space>
+                      </Card>
+                    </Col>
+                  </Row>
+
                   <WarehouseInventorySection
                     data={inventorySummary}
                     loading={isInventoryLoading}
@@ -1441,6 +2151,18 @@ export function WarehousePage() {
                               <Descriptions.Item label="销售单号">{selectedOutbound.salesNo}</Descriptions.Item>
                               <Descriptions.Item label="关联合同">{selectedOutbound.contractNo}</Descriptions.Item>
                               <Descriptions.Item label="关联批次">{selectedOutbound.batchNo}</Descriptions.Item>
+                              <Descriptions.Item label="出库波次">{selectedOutbound.waveNo ?? "-"}</Descriptions.Item>
+                              <Descriptions.Item label="提货清单">{selectedOutbound.pickupListNo ?? "-"}</Descriptions.Item>
+                              <Descriptions.Item label="复核状态">
+                                <Tag color={getStatusColor(selectedOutbound.reviewStatus)}>
+                                  {selectedOutbound.reviewStatus ?? "-"}
+                                </Tag>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="拣货状态">
+                                <Tag color={getStatusColor(selectedOutbound.pickingStatus)}>
+                                  {selectedOutbound.pickingStatus ?? "-"}
+                                </Tag>
+                              </Descriptions.Item>
                               <Descriptions.Item label="客户">{selectedOutbound.customerName}</Descriptions.Item>
                               <Descriptions.Item label="商品">{selectedOutbound.skuName}</Descriptions.Item>
                               <Descriptions.Item label="数量">
@@ -1476,6 +2198,35 @@ export function WarehousePage() {
                                 <Statistic title="冻结码" value={selectedOutbound.qrSummary.frozen} suffix="个" />
                               </Card>
                             </div>
+
+                            <Card size="small" className="placeholder-card" title="双人复核推进">
+                              <Space direction="vertical" size="small" style={{ width: "100%" }}>
+                                <Typography.Text type="secondary">
+                                  一审完成后进入拣货中，二审完成后进入可扫码出库状态。
+                                </Typography.Text>
+                                <Space wrap>
+                                  <Button
+                                    onClick={() => void advanceReview(selectedOutbound.id, "first")}
+                                    disabled={selectedOutbound.reviewStatus === "FIRST_APPROVED" || selectedOutbound.reviewStatus === "APPROVED"}
+                                  >
+                                    一审通过
+                                  </Button>
+                                  <Button
+                                    type="primary"
+                                    onClick={() => void advanceReview(selectedOutbound.id, "second")}
+                                    disabled={selectedOutbound.reviewStatus !== "FIRST_APPROVED"}
+                                  >
+                                    二审通过
+                                  </Button>
+                                </Space>
+                                <Typography.Text type="secondary">
+                                  一审：{selectedOutbound.firstReviewerName ?? "-"} / {formatDateTime(selectedOutbound.firstReviewedAt)}
+                                </Typography.Text>
+                                <Typography.Text type="secondary">
+                                  二审：{selectedOutbound.secondReviewerName ?? "-"} / {formatDateTime(selectedOutbound.secondReviewedAt)}
+                                </Typography.Text>
+                              </Space>
+                            </Card>
                           </Space>
                         ) : (
                           <Empty description="请选择一条销售出库任务" />
@@ -1491,6 +2242,49 @@ export function WarehousePage() {
           ]}
         />
       </Card>
+
+      <Modal
+        open={isAnomalyModalOpen}
+        title="上报仓储异常"
+        okText="提交异常"
+        cancelText="取消"
+        onCancel={() => setIsAnomalyModalOpen(false)}
+        onOk={() => void reportAnomaly()}
+        confirmLoading={isSubmittingAnomaly}
+      >
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Select
+            value={anomalyDraft.mode}
+            options={anomalyModeOptions.map((item) => ({ label: item.label, value: item.value }))}
+            onChange={(value) => setAnomalyDraft((previous) => ({ ...previous, mode: value }))}
+          />
+          <Select
+            value={anomalyDraft.anomalyType}
+            options={anomalyTypeOptions.map((item) => ({ label: item.label, value: item.value }))}
+            onChange={(value) => setAnomalyDraft((previous) => ({ ...previous, anomalyType: value }))}
+          />
+          <InputNumber
+            min={1}
+            style={{ width: "100%" }}
+            value={anomalyDraft.quantity}
+            onChange={(value) =>
+              setAnomalyDraft((previous) => ({ ...previous, quantity: typeof value === "number" ? value : 1 }))
+            }
+            placeholder="异常数量"
+          />
+          <Input
+            value={anomalyDraft.qrCode}
+            onChange={(event) => setAnomalyDraft((previous) => ({ ...previous, qrCode: event.target.value }))}
+            placeholder="相关二维码，可选"
+          />
+          <Input.TextArea
+            rows={4}
+            value={anomalyDraft.description}
+            onChange={(event) => setAnomalyDraft((previous) => ({ ...previous, description: event.target.value }))}
+            placeholder="请填写异常说明，例如错货、破损、漏扫、错批次等"
+          />
+        </Space>
+      </Modal>
 
       <Modal
         open={isPreviewVisible}

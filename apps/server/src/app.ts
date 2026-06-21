@@ -5,7 +5,7 @@ import express from "express";
 import { aiAssistantRouter } from "./routes/ai-assistant";
 import { batchesRouter } from "./routes/batches";
 import { companiesRouter } from "./routes/companies";
-import { workspaceRoot, uploadsRoot } from "./config/paths";
+import { requirementsRoot, testDocsRoot, workspaceRoot, uploadsRoot } from "./config/paths";
 import { contractsRouter } from "./routes/contracts";
 import { costsRouter } from "./routes/costs";
 import { customsRouter } from "./routes/customs";
@@ -32,6 +32,8 @@ export function createApp() {
   app.use(cors());
   app.use(express.json());
   app.use("/uploads", express.static(uploadsRoot));
+  app.use("/requirements", express.static(requirementsRoot));
+  app.use("/test-docs", express.static(testDocsRoot));
   app.use("/api", (_request, response, next) => {
     response.set({
       "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",

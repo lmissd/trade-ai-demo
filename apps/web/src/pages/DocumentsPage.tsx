@@ -42,6 +42,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL, requestJson, resolveApiUrl } from "../lib/api";
+import { isCustomerDemo } from "../lib/runtime";
 
 type DocumentType =
   | "CONTRACT"
@@ -1989,7 +1990,7 @@ export function DocumentsPage() {
                 type="info"
                 showIcon
                 message="当前规则"
-                description="AI 识别结果默认来自后端 DemoConfig。删除与作废都会进入 AuditLog；已生成业务数据的单据不能删除，只能作废或替换，且不会影响合同、批次、二维码和库存流水。"
+                description="AI 识别结果默认来自后端演示场景。删除与作废都会进入审计记录；已生成业务数据的单据不能删除，只能作废或替换，且不会影响合同、批次、二维码和库存流水。"
               />
 
               <Card size="small" className="placeholder-card" title="成熟版关键节点提醒">
@@ -2036,8 +2037,8 @@ export function DocumentsPage() {
                     <Typography.Text strong>演示管理员</Typography.Text>
                     <Typography.Paragraph type="secondary" style={{ margin: "8px 0 0" }}>
                       一键清空当前演示业务数据并回到空白演示起点。会清空当前单据、合同、批次、二维码、库存流水、
-                      采购/物流/工单等演示业务数据，但保留基础组织、仓库和网页 AI 升级配置。默认演示单据图片已放在
-                      `pics` 目录，需要你手动上传开始识别。
+                      采购/物流/工单等演示业务数据，但保留基础组织、仓库和网页 AI 升级配置。默认演示单据图片已随客户包附带，
+                      可以直接从“测试资料”中选择上传。
                     </Typography.Paragraph>
                   </div>
 
@@ -2083,14 +2084,20 @@ export function DocumentsPage() {
 
                   {activeScenario ? (
                     <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                      当前激活 DemoConfig：{activeScenario.customerName} / {activeScenario.supplierName} /{" "}
+                      当前激活演示场景：{activeScenario.customerName} / {activeScenario.supplierName} /{" "}
                       {activeScenario.amount} {activeScenario.currency}
                     </Typography.Paragraph>
                   ) : null}
 
-                  <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                    默认素材目录：`D:\国际贸易多公司一体化管理系统\pics`
-                  </Typography.Paragraph>
+                  {isCustomerDemo ? (
+                    <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                      默认素材已包含在客户包内，可直接用于上传识别。
+                    </Typography.Paragraph>
+                  ) : (
+                    <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                      默认素材目录：`pics`
+                    </Typography.Paragraph>
+                  )}
 
                   <Button
                     danger
@@ -2830,7 +2837,7 @@ export function DocumentsPage() {
             message="这会回到空白演示起点"
             description={
               standardScenario
-                ? `将删除当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片。重置后系统只保留标准场景参数与基础底座，不再自动生成单据、合同、批次和库存；请从 pics 目录手动上传默认图片开始演示。`
+                ? `将删除当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片。重置后系统只保留标准场景参数与基础底座，不再自动生成单据、合同、批次和库存；请从客户包内附带的测试资料重新开始演示。`
                 : "将删除当前演示单据、正式合同、批次、二维码、库存流水、采购单、物流记录、工单等业务数据，并清理已上传单据文件与二维码图片。重置后系统会回到空白演示起点。"
             }
           />
@@ -2860,7 +2867,7 @@ export function DocumentsPage() {
                   key: "note",
                   label: "恢复后状态",
                   children:
-                    "回到“合同与单据列表为空、由用户手动上传 pics 目录中的默认图片开始识别”的空白演示状态。"
+                    "回到“合同与单据列表为空、由用户手动上传客户包内默认图片开始识别”的空白演示状态。"
                 }
               ]}
             />

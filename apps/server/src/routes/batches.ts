@@ -3,6 +3,39 @@ import { QrItemStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 
 export const batchesRouter = Router();
+const PALLET_SIZE = 10;
+
+function buildHierarchySummary(
+  qrItems: Array<{
+    unitTraceCode?: string | null;
+    boxTraceCode?: string | null;
+    palletTraceCode?: string | null;
+  }>
+) {
+  const unitCodes = new Set<string>();
+  const boxCodes = new Set<string>();
+  const palletCodes = new Set<string>();
+
+  for (const item of qrItems) {
+    if (item.unitTraceCode) {
+      unitCodes.add(item.unitTraceCode);
+    }
+
+    if (item.boxTraceCode) {
+      boxCodes.add(item.boxTraceCode);
+    }
+
+    if (item.palletTraceCode) {
+      palletCodes.add(item.palletTraceCode);
+    }
+  }
+
+  return {
+    unitCount: unitCodes.size,
+    boxCount: boxCodes.size,
+    palletCount: palletCodes.size
+  };
+}
 
 batchesRouter.get("/", async (_request, response) => {
   const batches = await prisma.batch.findMany({
@@ -38,7 +71,10 @@ batchesRouter.get("/", async (_request, response) => {
       qrItems: {
         select: {
           id: true,
-          status: true
+          status: true,
+          unitTraceCode: true,
+          boxTraceCode: true,
+          palletTraceCode: true
         }
       }
     }
@@ -57,7 +93,15 @@ batchesRouter.get("/", async (_request, response) => {
           pendingInbound: pendingInboundCount,
           inStock: inStockCount,
           outbound: outboundCount
-        }
+        },
+        hierarchySummary:
+          batch.qrItems.length > 0
+            ? buildHierarchySummary(batch.qrItems)
+            : {
+                unitCount: 0,
+                boxCount: 0,
+                palletCount: Math.ceil(batch.totalQuantity / PALLET_SIZE)
+              }
       };
     })
   );
@@ -104,7 +148,12 @@ batchesRouter.get("/:id", async (request, response) => {
           qrCode: true,
           serialNo: true,
           status: true,
-          createdAt: true
+          createdAt: true,
+          unitTraceCode: true,
+          boxTraceCode: true,
+          palletTraceCode: true,
+          freezeReason: true,
+          statusRemark: true
         },
         orderBy: {
           serialNo: "asc"
@@ -140,6 +189,7 @@ batchesRouter.get("/:id", async (request, response) => {
 
   response.json({
     ...batch,
-    qrSummary
+    qrSummary,
+    hierarchySummary: buildHierarchySummary(batch.qrItems)
   });
 });

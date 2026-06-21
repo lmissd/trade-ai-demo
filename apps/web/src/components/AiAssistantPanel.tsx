@@ -16,6 +16,7 @@ import {
 } from "antd";
 import { MessageOutlined, RobotOutlined, SettingOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { requestJson } from "../lib/api";
+import { isCustomerDemo } from "../lib/runtime";
 
 type RuntimeConfig = {
   provider: string;
@@ -121,6 +122,10 @@ function buildSourceDescription(status: AiAssistantStatus | null) {
     return "正在加载 AI 助手状态。";
   }
 
+  if (isCustomerDemo) {
+    return status.llmEnabled ? "当前已准备好直接提问。" : "当前处于本地模板模式，也可以直接提问测试。";
+  }
+
   if (status.source === "runtime") {
     return "当前优先使用网页里保存的升级版 AI 配置。";
   }
@@ -144,6 +149,9 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
   const [isStatusLoading, setIsStatusLoading] = useState(true);
   const [isAsking, setIsAsking] = useState(false);
   const [isConfigSaving, setIsConfigSaving] = useState(false);
+  const showAdvancedConfig = !isCustomerDemo;
+  const customerSourceLabel = status?.llmEnabled ? "可直接使用" : "本地模板";
+  const displaySourceLabel = isCustomerDemo ? customerSourceLabel : status ? sourceLabelMap[status.source] : "-";
 
   function applyProviderPreset(provider: string, model: string, baseUrl: string) {
     setProviderInput(provider);
@@ -327,11 +335,15 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
             AI 助手
           </Typography.Title>
           <Typography.Paragraph style={{ marginBottom: 0 }}>
-            默认就是本地模板 AI，想接入 DeepSeek 或其他 OpenAI 兼容大模型时，再切到升级版 AI 助手并填写后端配置。
+            {isCustomerDemo
+              ? "你可以直接提问当前业务状态，系统会基于真实库存和单据结果给出回答。"
+              : "默认就是本地模板 AI，想接入 DeepSeek 或其他 OpenAI 兼容大模型时，再切到升级版 AI 助手并填写后端配置。"}
           </Typography.Paragraph>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 8 }}>
-            DeepSeek 官方当前推荐使用 `https://api.deepseek.com`，模型优先填 `deepseek-v4-flash` 或 `deepseek-v4-pro`。
-          </Typography.Paragraph>
+          {!isCustomerDemo ? (
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 8 }}>
+              DeepSeek 官方当前推荐使用 `https://api.deepseek.com`，模型优先填 `deepseek-v4-flash` 或 `deepseek-v4-pro`。
+            </Typography.Paragraph>
+          ) : null}
         </div>
       </div>
 
@@ -339,9 +351,9 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
         <Tag color="blue">真实流程问答</Tag>
         <Tag color="cyan">后端受控查询</Tag>
         <Tag color={status?.llmEnabled ? "green" : "orange"}>
-          {status?.llmEnabled ? "升级版 AI 已启用" : "本地模板模式"}
+          {status?.llmEnabled ? (isCustomerDemo ? "智能回答可用" : "升级版 AI 已启用") : "本地回答模式"}
         </Tag>
-        <Tag color="gold">{status ? sourceLabelMap[status.source] : "状态加载中"}</Tag>
+        <Tag color="gold">{status ? displaySourceLabel : "状态加载中"}</Tag>
       </div>
     </section>
   );
@@ -350,19 +362,27 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
     <Row gutter={[variant === "drawer" ? 12 : 20, variant === "drawer" ? 12 : 20]}>
       <Col xs={24} md={variant === "drawer" ? 8 : 8}>
         <Card className="stat-card">
-          <Statistic title="回答模式" value={status?.mode === "llm" ? "升级版 AI" : "本地模板"} />
+          <Statistic title="回答模式" value={status?.mode === "llm" ? (isCustomerDemo ? "智能回答" : "升级版 AI") : "本地模板"} />
         </Card>
       </Col>
       <Col xs={24} md={variant === "drawer" ? 8 : 8}>
         <Card className="stat-card">
-          <Statistic title="当前来源" value={status ? sourceLabelMap[status.source] : "-"} />
+          <Statistic title="当前来源" value={status ? displaySourceLabel : "-"} />
         </Card>
       </Col>
-      <Col xs={24} md={variant === "drawer" ? 8 : 8}>
-        <Card className="stat-card">
-          <Statistic title="Provider" value={status?.provider ?? "-"} />
-        </Card>
-      </Col>
+      {showAdvancedConfig ? (
+        <Col xs={24} md={variant === "drawer" ? 8 : 8}>
+          <Card className="stat-card">
+            <Statistic title="Provider" value={status?.provider ?? "-"} />
+          </Card>
+        </Col>
+      ) : (
+        <Col xs={24} md={variant === "drawer" ? 8 : 8}>
+          <Card className="stat-card">
+            <Statistic title="可用状态" value={status?.llmEnabled ? "可直接提问" : "本地模板"} />
+          </Card>
+        </Col>
+      )}
     </Row>
   );
 
@@ -370,7 +390,15 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
     <Alert
       type={status?.llmEnabled ? "success" : "warning"}
       showIcon
-      message={status?.llmEnabled ? "当前已启用升级版 AI 回答" : "当前处于本地模板模式"}
+      message={
+        isCustomerDemo
+          ? status?.llmEnabled
+            ? "当前已准备好直接提问"
+            : "当前处于本地模板模式"
+          : status?.llmEnabled
+            ? "当前已启用升级版 AI 回答"
+            : "当前处于本地模板模式"
+      }
       description={buildSourceDescription(status)}
     />
   );
@@ -414,7 +442,7 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
     </Card>
   );
 
-  const upgradeCard = (
+  const upgradeCard = showAdvancedConfig ? (
     <Card
       className="placeholder-card"
       title={
@@ -452,7 +480,7 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
           <div>
             <Typography.Text strong>当前运行来源</Typography.Text>
             <Typography.Paragraph style={{ marginTop: 8, marginBottom: 0 }}>
-              {status ? sourceLabelMap[status.source] : "加载中"}
+              {status ? (isCustomerDemo ? displaySourceLabel : sourceLabelMap[status.source]) : "加载中"}
             </Typography.Paragraph>
           </div>
           <div>
@@ -541,7 +569,7 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
         </div>
       </Space>
     </Card>
-  );
+  ) : null;
 
   const answerCard = (
     <Card className="placeholder-card document-detail-card" title="AI 回答" loading={isAsking}>
@@ -590,8 +618,12 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
               { label: "批次号", value: answer.references.batchNo ?? "-" },
               { label: "合同号", value: answer.references.contractNo ?? "-" },
               { label: "二维码", value: answer.references.qrCode ?? "-" },
-              { label: "Provider", value: answer.provider },
-              { label: "模型", value: answer.model ?? "未使用大模型" }
+              ...(showAdvancedConfig
+                ? [
+                    { label: "Provider", value: answer.provider },
+                    { label: "模型", value: answer.model ?? "未使用大模型" }
+                  ]
+                : [{ label: "回答方式", value: answer.answerMode === "llm" ? "智能回答" : "本地模板" }])
             ]}
           />
 
@@ -628,7 +660,7 @@ export function AiAssistantPanel({ variant = "page" }: AiAssistantPanelProps) {
       {statCards}
       <div style={{ marginTop: 20 }}>{statusAlert}</div>
       <div style={{ marginTop: 20 }}>{askCard}</div>
-      <div style={{ marginTop: 20 }}>{upgradeCard}</div>
+      {upgradeCard ? <div style={{ marginTop: 20 }}>{upgradeCard}</div> : null}
 
       <Row gutter={[20, 20]} align="top" style={{ marginTop: 20 }}>
         <Col xs={24} xl={14}>

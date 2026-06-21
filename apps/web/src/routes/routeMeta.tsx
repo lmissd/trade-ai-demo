@@ -46,8 +46,8 @@ export const routeMetaByPath: Record<string, RouteMeta> = {
     subtitle: "查看由单据草稿确认生成的正式合同、合同明细、采购草稿与应收草稿。"
   },
   "/batches": {
-    title: "批次数据",
-    subtitle: "查看合同下生成的货物批次，并为后续二维码生成、扫码入库和库存统计做准备。"
+    title: "批次追踪",
+    subtitle: "批次是贯穿合同、采购、物流、清关、仓储、销售和库存的追踪线索，不作为独立业务处理模块。"
   },
   "/procurement": {
     title: "采购与集货",
@@ -93,6 +93,10 @@ export const routeMetaByPath: Record<string, RouteMeta> = {
     title: "二维码追溯",
     subtitle: "二维码生命周期、状态筛选与批次追溯都将从这里进入，库存统计必须依赖真实状态。"
   },
+  "/materials": {
+    title: "测试资料",
+    subtitle: "集中浏览需求截图与测试单据，方便客户直接查看和上传。"
+  },
   "/ai-assistant": {
     title: "AI 助手",
     subtitle: "老板提问后先走后端受控查询，再基于真实库存结果生成自然语言回答。"
@@ -114,6 +118,8 @@ export const routeMenuEntries: RouteMenuEntry[] = [
   { key: "/work-orders", icon: <SolutionOutlined />, label: "自动工单" },
   { key: "/reports", icon: <ShopOutlined />, label: "数据报表" },
   { key: "/qr-items", icon: <QrcodeOutlined />, label: "二维码追溯" }
+  ,
+  { key: "/materials", icon: <FileSearchOutlined />, label: "测试资料" }
 ];
 
 export const routeMenuItems: ItemType[] = routeMenuEntries;

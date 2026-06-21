@@ -616,9 +616,9 @@ async function resolveBatchFacts(context: IntentContext): Promise<QuestionFacts>
     if (!masterBatch) {
       return {
         references: {},
-        highlights: [{ label: "结果", value: "当前还没有可用于问答的批次数据" }],
+        highlights: [{ label: "结果", value: "当前还没有可用于问答的批次追踪记录" }],
         data: {
-          message: "当前没有批次数据"
+          message: "当前没有批次追踪记录"
         }
       };
     }
@@ -1231,7 +1231,7 @@ function buildTemplateAnswer(context: IntentContext, facts: QuestionFacts) {
           typeof facts.data.nextAction === "string" ? facts.data.nextAction : "先生成二维码，再通过扫码形成真实库存。";
 
         if (!batchMaster) {
-          return "当前还没有可用于问答的批次数据。";
+          return "当前还没有可用于问答的批次追踪记录。";
         }
 
         return `${batchMaster.batchNo} 这批货目前不是系统出错。它的批次计划数量是 ${batchMaster.totalQuantity}${batchMaster.unit}${

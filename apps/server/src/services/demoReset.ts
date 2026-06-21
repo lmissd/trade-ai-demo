@@ -60,6 +60,7 @@ export async function resetDemoEnvironment(prisma: PrismaClient) {
     await tx.outboundOrder.deleteMany();
     await tx.inboundOrder.deleteMany();
     await tx.preReceiveOrder.deleteMany();
+    await tx.warehouseAnomaly.deleteMany();
     await tx.customsClearance.deleteMany();
     await tx.shipmentNode.deleteMany();
     await tx.shipment.deleteMany();

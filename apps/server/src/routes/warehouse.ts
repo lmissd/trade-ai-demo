@@ -1,9 +1,17 @@
-import { BatchStatus, QrItemStatus, StockMovementType } from "@prisma/client";
+import {
+  BatchStatus,
+  QrItemStatus,
+  StockMovementType,
+  WarehouseAnomalyMode,
+  WarehouseAnomalyType
+} from "@prisma/client";
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
+import { buildInventorySummary } from "../services/inventorySummary";
 
 export const warehouseRouter = Router();
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+const PALLET_SIZE = 10;
 
 type ScanOperationType = "INBOUND" | "OUTBOUND";
 
@@ -42,6 +50,45 @@ type BulkScanPayload = {
   locationId?: string | null;
 };
 
+type ReportWarehouseAnomalyPayload = {
+  mode?: WarehouseAnomalyMode;
+  anomalyType?: WarehouseAnomalyType;
+  batchId?: string;
+  contractId?: string;
+  warehouseId?: string;
+  relatedOrderId?: string;
+  relatedOrderNo?: string;
+  qrCode?: string;
+  quantity?: number;
+  description?: string;
+};
+
+type HandleWarehouseAnomalyPayload = {
+  status?: string;
+  resolution?: string;
+};
+
+type FreezeQrItemPayload = {
+  reason?: string;
+  remark?: string;
+};
+
+type UnfreezeQrItemPayload = {
+  remark?: string;
+};
+
+type CreateStocktakePayload = {
+  batchId?: string;
+  contractId?: string;
+  warehouseId?: string;
+  note?: string;
+};
+
+type CompleteStocktakePayload = {
+  actualQuantity?: number;
+  note?: string;
+};
+
 function normalizeText(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -73,6 +120,69 @@ function ensurePositiveInteger(value: unknown) {
   }
 
   return value;
+}
+
+function buildHierarchySummary(
+  qrItems: Array<{
+    unitTraceCode?: string | null;
+    boxTraceCode?: string | null;
+    palletTraceCode?: string | null;
+  }>
+) {
+  const unitCodes = new Set<string>();
+  const boxCodes = new Set<string>();
+  const palletCodes = new Set<string>();
+
+  for (const item of qrItems) {
+    if (item.unitTraceCode) {
+      unitCodes.add(item.unitTraceCode);
+    }
+
+    if (item.boxTraceCode) {
+      boxCodes.add(item.boxTraceCode);
+    }
+
+    if (item.palletTraceCode) {
+      palletCodes.add(item.palletTraceCode);
+    }
+  }
+
+  return {
+    unitCount: unitCodes.size,
+    boxCount: boxCodes.size,
+    palletCount: palletCodes.size
+  };
+}
+
+function buildAppointmentNo(batchNo: string) {
+  return `APT-${batchNo}`;
+}
+
+function buildInboundWaveNo(batchNo: string) {
+  return `WAVE-IN-${batchNo}`;
+}
+
+function buildOutboundWaveNo(batchNo: string) {
+  return `WAVE-OUT-${batchNo}`;
+}
+
+function buildPickupListNo(batchNo: string) {
+  return `PKL-${batchNo}`;
+}
+
+function buildDockNo(batchNo: string) {
+  const batchParts = batchNo.split("-");
+  const lastPart = batchParts[batchParts.length - 1] ?? "01";
+  const dockNo = ((Number(lastPart.replace(/\D/g, "")) || 1) % 6) + 1;
+  return `DOCK-${String(dockNo).padStart(2, "0")}`;
+}
+
+function buildWarehouseAnomalyNo() {
+  return `ANM-${Date.now()}`;
+}
+
+function buildStocktakeNo(batchNo: string) {
+  return `STK-${batchNo}-${String(Date.now()).slice(-6)}`;
 }
 
 async function resolveOperator() {
@@ -298,12 +408,28 @@ async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: str
         contractId: resolvedBatch.contractId,
         batchId: resolvedBatch.id,
         warehouseId: warehouse.id,
+        appointmentNo: buildAppointmentNo(resolvedBatch.batchNo),
+        appointmentTime: new Date(),
         expectedArrivalTime: new Date(),
+        waveNo: buildInboundWaveNo(resolvedBatch.batchNo),
+        dockNo: buildDockNo(resolvedBatch.batchNo),
+        arrivalStatus: "SCHEDULED",
         skuName: resolvedBatch.productName,
         quantity: resolvedBatch.totalQuantity,
         unit: resolvedBatch.unit,
         suggestedLocation: suggestedLocation?.locationCode ?? warehouse.name,
         status: "READY"
+      }
+    });
+  } else if (!preReceiveOrder.appointmentNo || !preReceiveOrder.waveNo || !preReceiveOrder.dockNo) {
+    preReceiveOrder = await prisma.preReceiveOrder.update({
+      where: { id: preReceiveOrder.id },
+      data: {
+        appointmentNo: preReceiveOrder.appointmentNo ?? buildAppointmentNo(resolvedBatch.batchNo),
+        appointmentTime: preReceiveOrder.appointmentTime ?? new Date(),
+        waveNo: preReceiveOrder.waveNo ?? buildInboundWaveNo(resolvedBatch.batchNo),
+        dockNo: preReceiveOrder.dockNo ?? buildDockNo(resolvedBatch.batchNo),
+        arrivalStatus: preReceiveOrder.arrivalStatus || "SCHEDULED"
       }
     });
   }
@@ -381,9 +507,23 @@ async function ensureWarehouseTaskContext(mode: ScanOperationType, batchId?: str
         contractId: resolvedBatch.contractId,
         batchId: resolvedBatch.id,
         warehouseId: warehouse.id,
+        waveNo: buildOutboundWaveNo(resolvedBatch.batchNo),
+        pickupListNo: buildPickupListNo(resolvedBatch.batchNo),
+        reviewStatus: "PENDING",
+        pickingStatus: "READY",
         quantity: outboundQuantity,
         unit: resolvedBatch.unit,
         status: "READY"
+      }
+    });
+  } else if (!outboundOrder.waveNo || !outboundOrder.pickupListNo) {
+    outboundOrder = await prisma.outboundOrder.update({
+      where: { id: outboundOrder.id },
+      data: {
+        waveNo: outboundOrder.waveNo ?? buildOutboundWaveNo(resolvedBatch.batchNo),
+        pickupListNo: outboundOrder.pickupListNo ?? buildPickupListNo(resolvedBatch.batchNo),
+        reviewStatus: outboundOrder.reviewStatus || "PENDING",
+        pickingStatus: outboundOrder.pickingStatus || "READY"
       }
     });
   }
@@ -422,6 +562,7 @@ async function buildWarehouseContext(mode: ScanOperationType, batchId?: string |
     where: { batchId: context.batch.id },
     orderBy: [{ serialNo: "asc" }]
   });
+  const hierarchySummary = buildHierarchySummary(qrItems);
 
   const recentStockMovements = await prisma.stockMovement.findMany({
     where: {
@@ -455,7 +596,19 @@ async function buildWarehouseContext(mode: ScanOperationType, batchId?: string |
       taskNo: mode === "INBOUND" ? context.preReceiveOrder.preReceiveNo : context.outboundOrder.outboundNo,
       orderNo: mode === "INBOUND" ? context.inboundOrder.inboundNo : context.outboundOrder.outboundNo,
       type: mode === "INBOUND" ? "预收货 / 入库任务" : "销售出库任务",
-      status: task.status
+      status: task.status,
+      appointmentNo: mode === "INBOUND" ? context.preReceiveOrder.appointmentNo : null,
+      appointmentTime: mode === "INBOUND" ? context.preReceiveOrder.appointmentTime : null,
+      waveNo: mode === "INBOUND" ? context.preReceiveOrder.waveNo : context.outboundOrder.waveNo,
+      dockNo: mode === "INBOUND" ? context.preReceiveOrder.dockNo : null,
+      arrivalStatus: mode === "INBOUND" ? context.preReceiveOrder.arrivalStatus : null,
+      pickupListNo: mode === "OUTBOUND" ? context.outboundOrder.pickupListNo : null,
+      reviewStatus: mode === "OUTBOUND" ? context.outboundOrder.reviewStatus : null,
+      firstReviewerName: mode === "OUTBOUND" ? context.outboundOrder.firstReviewerName : null,
+      firstReviewedAt: mode === "OUTBOUND" ? context.outboundOrder.firstReviewedAt : null,
+      secondReviewerName: mode === "OUTBOUND" ? context.outboundOrder.secondReviewerName : null,
+      secondReviewedAt: mode === "OUTBOUND" ? context.outboundOrder.secondReviewedAt : null,
+      pickingStatus: mode === "OUTBOUND" ? context.outboundOrder.pickingStatus : null
     },
     batch: {
       id: context.batch.id,
@@ -497,6 +650,12 @@ async function buildWarehouseContext(mode: ScanOperationType, batchId?: string |
       damaged: qrItems.filter((item) => item.status === QrItemStatus.DAMAGED).length,
       lost: qrItems.filter((item) => item.status === QrItemStatus.LOST).length,
       frozen: qrItems.filter((item) => item.status === QrItemStatus.FROZEN).length
+    },
+    hierarchySummary: {
+      unitCount: hierarchySummary.unitCount || qrItems.length,
+      boxCount: hierarchySummary.boxCount || qrItems.length,
+      palletCount:
+        hierarchySummary.palletCount || Math.ceil(Math.max(qrItems.length, context.batch.totalQuantity) / PALLET_SIZE)
     },
     locations: context.locations.map((location) => ({
       id: location.id,
@@ -572,7 +731,7 @@ async function buildWarehouseWorkbench(batchId?: string | null) {
   const inboundFocus = await ensureWarehouseTaskContext("INBOUND", batchId);
   const outboundFocus = await ensureWarehouseTaskContext("OUTBOUND", inboundFocus.batch.id);
 
-  const [preReceiveOrders, inboundOrders, outboundOrders, salesOrders, batches, contracts, warehouses, locations] =
+  const [preReceiveOrders, inboundOrders, outboundOrders, salesOrders, batches, contracts, warehouses, locations, anomalies, stocktakeOrders] =
     await Promise.all([
       prisma.preReceiveOrder.findMany({
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
@@ -597,6 +756,14 @@ async function buildWarehouseWorkbench(batchId?: string | null) {
       }),
       prisma.warehouseLocation.findMany({
         orderBy: [{ warehouseId: "asc" }, { zone: "asc" }, { locationCode: "asc" }]
+      }),
+      prisma.warehouseAnomaly.findMany({
+        orderBy: [{ reportedAt: "desc" }, { createdAt: "desc" }],
+        take: 12
+      }),
+      prisma.stocktakeOrder.findMany({
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        take: 12
       })
     ]);
 
@@ -685,6 +852,11 @@ async function buildWarehouseWorkbench(batchId?: string | null) {
       warehouseId: order.warehouseId,
       warehouseName: warehouse?.name ?? "-",
       inboundNo: relatedInboundOrder?.inboundNo ?? "-",
+      appointmentNo: order.appointmentNo,
+      appointmentTime: order.appointmentTime,
+      waveNo: order.waveNo,
+      dockNo: order.dockNo,
+      arrivalStatus: order.arrivalStatus,
       scannedQuantity,
       remainingQuantity: Math.max(order.quantity - scannedQuantity, 0),
       qrSummary,
@@ -720,6 +892,14 @@ async function buildWarehouseWorkbench(batchId?: string | null) {
       deliveryMethod: salesOrder?.deliveryMethod ?? null,
       deliveryStatus: salesOrder?.deliveryStatus ?? null,
       signStatus: salesOrder?.signStatus ?? null,
+      waveNo: order.waveNo,
+      pickupListNo: order.pickupListNo,
+      reviewStatus: order.reviewStatus,
+      firstReviewerName: order.firstReviewerName,
+      firstReviewedAt: order.firstReviewedAt,
+      secondReviewerName: order.secondReviewerName,
+      secondReviewedAt: order.secondReviewedAt,
+      pickingStatus: order.pickingStatus,
       scannedQuantity,
       remainingQuantity: Math.max(order.quantity - scannedQuantity, 0),
       inStockAvailable: qrSummary.inStock,
@@ -776,12 +956,55 @@ async function buildWarehouseWorkbench(batchId?: string | null) {
       inStockQrCount: allQrSummary.inStock,
       outboundQrCount: allQrSummary.outbound,
       frozenQrCount: allQrSummary.frozen,
+      openAnomalyCount: anomalies.filter((item) => item.status === "OPEN").length,
+      stocktakePendingCount: stocktakeOrders.filter((item) => item.status !== "COMPLETED").length,
       warehouseCount: new Set(
         [...preReceiveRows.map((item) => item.warehouseId), ...outboundRows.map((item) => item.warehouseId)].filter(Boolean)
       ).size
     },
     preReceiveOrders: preReceiveRows,
     outboundOrders: outboundRows,
+    anomalies: anomalies.map((item) => ({
+      id: item.id,
+      anomalyNo: item.anomalyNo,
+      mode: item.mode,
+      anomalyType: item.anomalyType,
+      batchId: item.batchId,
+      batchNo: item.batchId ? batchById.get(item.batchId)?.batchNo ?? "-" : "-",
+      contractId: item.contractId,
+      contractNo: item.contractId ? contractById.get(item.contractId)?.contractNo ?? "-" : "-",
+      warehouseId: item.warehouseId,
+      warehouseName: item.warehouseId ? warehouseById.get(item.warehouseId)?.name ?? "-" : "-",
+      relatedOrderId: item.relatedOrderId,
+      relatedOrderNo: item.relatedOrderNo,
+      qrCode: item.qrCode,
+      quantity: item.quantity,
+      description: item.description,
+      status: item.status,
+      reportedByName: item.reportedByName,
+      handledByName: item.handledByName,
+      reportedAt: item.reportedAt,
+      handledAt: item.handledAt
+    })),
+    stocktakes: stocktakeOrders.map((item) => ({
+      id: item.id,
+      stocktakeNo: item.stocktakeNo,
+      warehouseId: item.warehouseId,
+      warehouseName: item.warehouseId ? warehouseById.get(item.warehouseId)?.name ?? "-" : "-",
+      batchId: item.batchId,
+      batchNo: item.batchId ? batchById.get(item.batchId)?.batchNo ?? "-" : "-",
+      contractId: item.contractId,
+      contractNo: item.contractId ? contractById.get(item.contractId)?.contractNo ?? "-" : "-",
+      status: item.status,
+      plannedQuantity: item.plannedQuantity,
+      actualQuantity: item.actualQuantity,
+      differenceQuantity: item.differenceQuantity,
+      note: item.note,
+      operatorName: item.operatorName,
+      startedAt: item.startedAt,
+      completedAt: item.completedAt,
+      createdAt: item.createdAt
+    })),
     locationSnapshots: locations.map((location) => ({
       id: location.id,
       warehouseId: location.warehouseId,
@@ -868,6 +1091,10 @@ async function createWarehouseMutation(
   }
 
   if (mode === "OUTBOUND") {
+    if (context.outboundOrder.reviewStatus !== "APPROVED") {
+      throw new Error("当前出库单尚未完成双人/双岗复核，请先完成一审和二审后再扫码出库。");
+    }
+
     const alreadyOutboundCount = await prisma.qrItem.count({
       where: {
         batchId: context.batch.id,
@@ -926,6 +1153,477 @@ warehouseRouter.post("/scan/context", async (request, response) => {
     response.json(context);
   } catch (error) {
     response.status(400).json({ message: toErrorMessage(error, "加载仓储任务上下文失败。") });
+  }
+});
+
+warehouseRouter.post("/anomalies", async (request, response) => {
+  const payload = (request.body ?? {}) as ReportWarehouseAnomalyPayload;
+  const batchId = normalizeText(payload.batchId);
+  const contractId = normalizeText(payload.contractId);
+  const warehouseId = normalizeText(payload.warehouseId);
+  const relatedOrderId = normalizeText(payload.relatedOrderId);
+  const relatedOrderNo = normalizeText(payload.relatedOrderNo);
+  const qrCode = normalizeText(payload.qrCode);
+  const quantity = ensurePositiveInteger(payload.quantity) ?? 1;
+  const description = normalizeText(payload.description);
+
+  if (!payload.mode || !payload.anomalyType || !batchId || !contractId || !warehouseId) {
+    response.status(400).json({ message: "mode, anomalyType, batchId, contractId and warehouseId are required." });
+    return;
+  }
+
+  try {
+    const operator = await resolveOperator();
+    const anomaly = await prisma.warehouseAnomaly.create({
+      data: {
+        anomalyNo: buildWarehouseAnomalyNo(),
+        mode: payload.mode,
+        anomalyType: payload.anomalyType,
+        batchId,
+        contractId,
+        warehouseId,
+        relatedOrderId,
+        relatedOrderNo,
+        qrCode,
+        quantity,
+        description,
+        status: "OPEN",
+        reportedById: operator?.id,
+        reportedByName: operator?.displayName ?? "Demo Owner"
+      }
+    });
+
+    response.json({
+      success: true,
+      anomaly,
+      workbench: await buildWarehouseWorkbench(batchId)
+    });
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "上报仓储异常失败。") });
+  }
+});
+
+warehouseRouter.post("/anomalies/:id/handle", async (request, response) => {
+  const anomalyId = normalizeText(request.params.id);
+  const payload = (request.body ?? {}) as HandleWarehouseAnomalyPayload;
+
+  if (!anomalyId) {
+    response.status(400).json({ message: "Anomaly id is required." });
+    return;
+  }
+
+  try {
+    const current = await prisma.warehouseAnomaly.findUnique({
+      where: { id: anomalyId }
+    });
+
+    if (!current) {
+      response.status(404).json({ message: "Warehouse anomaly not found." });
+      return;
+    }
+
+    const operator = await resolveOperator();
+    const anomaly = await prisma.warehouseAnomaly.update({
+      where: { id: anomalyId },
+      data: {
+        status: normalizeText(payload.status) ?? "RESOLVED",
+        description: normalizeText(payload.resolution) ?? current.description,
+        handledAt: new Date(),
+        handledById: operator?.id,
+        handledByName: operator?.displayName ?? "Demo Owner"
+      }
+    });
+
+    response.json({
+      success: true,
+      anomaly,
+      workbench: await buildWarehouseWorkbench(current.batchId)
+    });
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "处理仓储异常失败。") });
+  }
+});
+
+warehouseRouter.post("/qr-items/:id/freeze", async (request, response) => {
+  const qrItemId = normalizeText(request.params.id);
+  const payload = (request.body ?? {}) as FreezeQrItemPayload;
+  const reason = normalizeText(payload.reason);
+  const remark = normalizeText(payload.remark);
+
+  if (!qrItemId || !reason) {
+    response.status(400).json({ message: "Qr item id and freeze reason are required." });
+    return;
+  }
+
+  try {
+    const qrItem = await prisma.qrItem.findUnique({
+      where: { id: qrItemId },
+      include: {
+        batch: {
+          select: {
+            contractId: true
+          }
+        }
+      }
+    });
+
+    if (!qrItem) {
+      response.status(404).json({ message: "QR item not found." });
+      return;
+    }
+
+    if (qrItem.status !== QrItemStatus.IN_STOCK) {
+      throw new Error("只有在库二维码才能冻结。");
+    }
+
+    const resolvedContractId = qrItem.contractId ?? qrItem.batch.contractId;
+
+    if (!resolvedContractId) {
+      throw new Error("当前二维码缺少关联合同，无法记录冻结库存流水。");
+    }
+
+    const operator = await resolveOperator();
+    const occurredAt = new Date();
+
+    const updatedQrItem = await prisma.$transaction(async (tx) => {
+      const updated = await tx.qrItem.update({
+        where: { id: qrItem.id },
+        data: {
+          status: QrItemStatus.FROZEN,
+          freezeReason: reason,
+          statusRemark: remark ?? reason
+        }
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          qrItemId: qrItem.id,
+          batchId: qrItem.batchId,
+          contractId: resolvedContractId,
+          skuId: qrItem.skuId,
+          movementType: StockMovementType.FREEZE,
+          fromStatus: qrItem.status,
+          toStatus: QrItemStatus.FROZEN,
+          warehouseName: qrItem.currentWarehouse,
+          warehouseId: qrItem.warehouseId,
+          locationId: qrItem.locationId,
+          operatorId: operator?.id,
+          operatorName: operator?.displayName ?? "Demo Owner",
+          note: "仓储冻结",
+          remark: remark ?? reason,
+          occurredAt
+        }
+      });
+
+      return updated;
+    });
+
+    response.json({
+      success: true,
+      qrItem: updatedQrItem,
+      workbench: await buildWarehouseWorkbench(qrItem.batchId),
+      inventory: await buildInventorySummary({
+        batchId: qrItem.batchId,
+        contractId: qrItem.contractId ?? undefined,
+        warehouseId: qrItem.warehouseId ?? undefined
+      })
+    });
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "冻结二维码失败。") });
+  }
+});
+
+warehouseRouter.post("/qr-items/:id/unfreeze", async (request, response) => {
+  const qrItemId = normalizeText(request.params.id);
+  const payload = (request.body ?? {}) as UnfreezeQrItemPayload;
+  const remark = normalizeText(payload.remark);
+
+  if (!qrItemId) {
+    response.status(400).json({ message: "Qr item id is required." });
+    return;
+  }
+
+  try {
+    const qrItem = await prisma.qrItem.findUnique({
+      where: { id: qrItemId },
+      include: {
+        batch: {
+          select: {
+            contractId: true
+          }
+        }
+      }
+    });
+
+    if (!qrItem) {
+      response.status(404).json({ message: "QR item not found." });
+      return;
+    }
+
+    if (qrItem.status !== QrItemStatus.FROZEN) {
+      throw new Error("只有冻结中的二维码才能解冻。");
+    }
+
+    const resolvedContractId = qrItem.contractId ?? qrItem.batch.contractId;
+
+    if (!resolvedContractId) {
+      throw new Error("当前二维码缺少关联合同，无法记录解冻库存流水。");
+    }
+
+    const operator = await resolveOperator();
+    const occurredAt = new Date();
+
+    const updatedQrItem = await prisma.$transaction(async (tx) => {
+      const updated = await tx.qrItem.update({
+        where: { id: qrItem.id },
+        data: {
+          status: QrItemStatus.IN_STOCK,
+          freezeReason: null,
+          statusRemark: remark ?? "已解冻"
+        }
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          qrItemId: qrItem.id,
+          batchId: qrItem.batchId,
+          contractId: resolvedContractId,
+          skuId: qrItem.skuId,
+          movementType: StockMovementType.UNFREEZE,
+          fromStatus: qrItem.status,
+          toStatus: QrItemStatus.IN_STOCK,
+          warehouseName: qrItem.currentWarehouse,
+          warehouseId: qrItem.warehouseId,
+          locationId: qrItem.locationId,
+          operatorId: operator?.id,
+          operatorName: operator?.displayName ?? "Demo Owner",
+          note: "仓储解冻",
+          remark: remark ?? "恢复可出库",
+          occurredAt
+        }
+      });
+
+      return updated;
+    });
+
+    response.json({
+      success: true,
+      qrItem: updatedQrItem,
+      workbench: await buildWarehouseWorkbench(qrItem.batchId),
+      inventory: await buildInventorySummary({
+        batchId: qrItem.batchId,
+        contractId: qrItem.contractId ?? undefined,
+        warehouseId: qrItem.warehouseId ?? undefined
+      })
+    });
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "解冻二维码失败。") });
+  }
+});
+
+warehouseRouter.post("/stocktakes", async (request, response) => {
+  const payload = (request.body ?? {}) as CreateStocktakePayload;
+  const batchId = normalizeText(payload.batchId);
+  const contractId = normalizeText(payload.contractId);
+  const warehouseId = normalizeText(payload.warehouseId);
+  const note = normalizeText(payload.note);
+
+  if (!batchId || !contractId || !warehouseId) {
+    response.status(400).json({ message: "batchId, contractId and warehouseId are required." });
+    return;
+  }
+
+  try {
+    const batch = await prisma.batch.findUnique({
+      where: { id: batchId },
+      select: {
+        id: true,
+        batchNo: true
+      }
+    });
+
+    if (!batch) {
+      response.status(404).json({ message: "Batch not found." });
+      return;
+    }
+
+    const plannedQuantity = await prisma.qrItem.count({
+      where: {
+        batchId,
+        warehouseId,
+        status: {
+          in: [QrItemStatus.IN_STOCK, QrItemStatus.FROZEN]
+        }
+      }
+    });
+
+    const operator = await resolveOperator();
+    const stocktake = await prisma.stocktakeOrder.create({
+      data: {
+        stocktakeNo: buildStocktakeNo(batch.batchNo),
+        warehouseId,
+        batchId,
+        contractId,
+        status: "IN_PROGRESS",
+        operatorId: operator?.id,
+        operatorName: operator?.displayName ?? "Demo Owner",
+        plannedQuantity,
+        actualQuantity: 0,
+        differenceQuantity: 0,
+        note,
+        startedAt: new Date()
+      }
+    });
+
+    response.json({
+      success: true,
+      stocktake,
+      workbench: await buildWarehouseWorkbench(batchId),
+      inventory: await buildInventorySummary({ batchId, contractId, warehouseId })
+    });
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "创建盘点任务失败。") });
+  }
+});
+
+warehouseRouter.post("/stocktakes/:id/complete", async (request, response) => {
+  const stocktakeId = normalizeText(request.params.id);
+  const payload = (request.body ?? {}) as CompleteStocktakePayload;
+  const actualQuantity = ensurePositiveInteger(payload.actualQuantity);
+  const note = normalizeText(payload.note);
+
+  if (!stocktakeId || actualQuantity === null) {
+    response.status(400).json({ message: "Stocktake id and actualQuantity are required." });
+    return;
+  }
+
+  try {
+    const existingStocktake = await prisma.stocktakeOrder.findUnique({
+      where: { id: stocktakeId }
+    });
+
+    if (!existingStocktake) {
+      response.status(404).json({ message: "Stocktake order not found." });
+      return;
+    }
+
+    const stocktake = await prisma.stocktakeOrder.update({
+      where: { id: stocktakeId },
+      data: {
+        status: "COMPLETED",
+        actualQuantity,
+        differenceQuantity: actualQuantity - existingStocktake.plannedQuantity,
+        note: note ?? existingStocktake.note,
+        completedAt: new Date()
+      }
+    });
+
+    response.json({
+      success: true,
+      stocktake,
+      workbench: await buildWarehouseWorkbench(existingStocktake.batchId),
+      inventory: await buildInventorySummary({
+        batchId: existingStocktake.batchId ?? undefined,
+        contractId: existingStocktake.contractId ?? undefined,
+        warehouseId: existingStocktake.warehouseId ?? undefined
+      })
+    });
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "完成盘点失败。") });
+  }
+});
+
+warehouseRouter.post("/outbound-orders/:id/first-review", async (request, response) => {
+  const outboundOrderId = normalizeText(request.params.id);
+
+  if (!outboundOrderId) {
+    response.status(400).json({ message: "Outbound order id is required." });
+    return;
+  }
+
+  try {
+    const current = await prisma.outboundOrder.findUnique({
+      where: { id: outboundOrderId },
+      select: {
+        reviewStatus: true
+      }
+    });
+
+    if (!current) {
+      response.status(404).json({ message: "Outbound order not found." });
+      return;
+    }
+
+    if (current.reviewStatus === "APPROVED") {
+      response.status(409).json({ message: "该出库单已完成二审，无需重复一审。" });
+      return;
+    }
+
+    const operator = await resolveOperator();
+    const outboundOrder = await prisma.outboundOrder.update({
+      where: { id: outboundOrderId },
+      data: {
+        reviewStatus: "FIRST_APPROVED",
+        firstReviewerName: operator?.displayName ?? "Demo Owner",
+        firstReviewedAt: new Date(),
+        pickingStatus: "PICKING"
+      }
+    });
+
+    response.json({
+      success: true,
+      outboundOrder,
+      workbench: await buildWarehouseWorkbench(outboundOrder.batchId)
+    });
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "出库一审失败。") });
+  }
+});
+
+warehouseRouter.post("/outbound-orders/:id/second-review", async (request, response) => {
+  const outboundOrderId = normalizeText(request.params.id);
+
+  if (!outboundOrderId) {
+    response.status(400).json({ message: "Outbound order id is required." });
+    return;
+  }
+
+  try {
+    const current = await prisma.outboundOrder.findUnique({
+      where: { id: outboundOrderId },
+      select: {
+        reviewStatus: true
+      }
+    });
+
+    if (!current) {
+      response.status(404).json({ message: "Outbound order not found." });
+      return;
+    }
+
+    if (current.reviewStatus !== "FIRST_APPROVED") {
+      response.status(409).json({ message: "出库单需要先完成一审，才能执行二审。" });
+      return;
+    }
+
+    const operator = await resolveOperator();
+    const outboundOrder = await prisma.outboundOrder.update({
+      where: { id: outboundOrderId },
+      data: {
+        reviewStatus: "APPROVED",
+        secondReviewerName: operator?.displayName ?? "Demo Owner",
+        secondReviewedAt: new Date(),
+        pickingStatus: "READY_TO_SCAN"
+      }
+    });
+
+    response.json({
+      success: true,
+      outboundOrder,
+      workbench: await buildWarehouseWorkbench(outboundOrder.batchId)
+    });
+  } catch (error) {
+    response.status(400).json({ message: toErrorMessage(error, "出库二审失败。") });
   }
 });
 
@@ -1264,6 +1962,18 @@ warehouseRouter.post("/scan/bulk", async (request, response) => {
           message: toErrorMessage(error, "批量执行失败。")
         });
       }
+    }
+
+    if (results.length === 0 && failures.length > 0) {
+      response.status(400).json({
+        success: false,
+        processed: 0,
+        requested: quantity,
+        failures,
+        items: [],
+        context: await buildWarehouseContext(mode, batchId)
+      });
+      return;
     }
 
     if (mode === "INBOUND" || mode === "OUTBOUND") {

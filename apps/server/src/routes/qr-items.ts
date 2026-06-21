@@ -10,11 +10,18 @@ fs.mkdirSync(qrCodesUploadDir, { recursive: true });
 
 export const qrItemsRouter = Router();
 
+const PALLET_SIZE = 10;
+
 type QrItemListResponse = {
   id: string;
   qrCode: string;
   serialNo: number;
   status: QrItemStatus;
+  unitTraceCode: string | null;
+  boxTraceCode: string | null;
+  palletTraceCode: string | null;
+  freezeReason: string | null;
+  statusRemark: string | null;
   productName: string | null;
   currentWarehouse: string | null;
   createdAt: string;
@@ -42,6 +49,29 @@ function buildQrSvgFileName(batchNo: string, serialNo: number) {
 
 function buildQrImageUrl(fileName: string) {
   return `/uploads/qr-codes/${fileName}`;
+}
+
+function buildTraceCode(batchNo: string, level: "UNIT" | "BOX" | "PALLET", sequenceNo: number) {
+  const padded = String(sequenceNo).padStart(4, "0");
+
+  if (level === "UNIT") {
+    return `${batchNo}-UNIT-${padded}`;
+  }
+
+  if (level === "BOX") {
+    return `${batchNo}-BOX-${padded}`;
+  }
+
+  return `${batchNo}-PLT-${padded}`;
+}
+
+function countQrSummary(items: Array<{ status: QrItemStatus }>) {
+  return {
+    total: items.length,
+    pendingInbound: items.filter((item) => item.status === QrItemStatus.PENDING_INBOUND).length,
+    inStock: items.filter((item) => item.status === QrItemStatus.IN_STOCK).length,
+    outbound: items.filter((item) => item.status === QrItemStatus.OUTBOUND).length
+  };
 }
 
 async function ensureQrSvgFile(qrCode: string, fileName: string) {
@@ -105,6 +135,9 @@ qrItemsRouter.post("/generate", async (request, response) => {
           qrCode: item.qrCode,
           serialNo: item.serialNo,
           status: item.status,
+          unitTraceCode: item.unitTraceCode,
+          boxTraceCode: item.boxTraceCode,
+          palletTraceCode: item.palletTraceCode,
           imageUrl
         };
       })
@@ -120,11 +153,11 @@ qrItemsRouter.post("/generate", async (request, response) => {
         totalQuantity: batch.totalQuantity,
         unit: batch.unit
       },
-      qrSummary: {
-        total: batch.qrItems.length,
-        pendingInbound: batch.qrItems.filter((item) => item.status === QrItemStatus.PENDING_INBOUND).length,
-        inStock: batch.qrItems.filter((item) => item.status === QrItemStatus.IN_STOCK).length,
-        outbound: batch.qrItems.filter((item) => item.status === QrItemStatus.OUTBOUND).length
+      qrSummary: countQrSummary(batch.qrItems),
+      hierarchySummary: {
+        unitCount: batch.qrItems.length,
+        boxCount: batch.qrItems.length,
+        palletCount: Math.ceil(batch.qrItems.length / PALLET_SIZE)
       },
       items: existingItems
     });
@@ -136,6 +169,10 @@ qrItemsRouter.post("/generate", async (request, response) => {
 
     for (let serialNo = 1; serialNo <= batch.totalQuantity; serialNo += 1) {
       const qrCode = `${batch.batchNo}-${String(serialNo).padStart(4, "0")}`;
+      const unitTraceCode = buildTraceCode(batch.batchNo, "UNIT", serialNo);
+      const boxTraceCode = buildTraceCode(batch.batchNo, "BOX", serialNo);
+      const palletTraceCode = buildTraceCode(batch.batchNo, "PALLET", Math.ceil(serialNo / PALLET_SIZE));
+
       const createdItem = await tx.qrItem.create({
         data: {
           qrCode,
@@ -146,7 +183,10 @@ qrItemsRouter.post("/generate", async (request, response) => {
           productName: batch.productName,
           status: QrItemStatus.PENDING_INBOUND,
           currentWarehouse: batch.destinationWarehouse,
-          warehouseId: batch.warehouseId
+          warehouseId: batch.warehouseId,
+          unitTraceCode,
+          boxTraceCode,
+          palletTraceCode
         }
       });
 
@@ -173,6 +213,9 @@ qrItemsRouter.post("/generate", async (request, response) => {
         qrCode: item.qrCode,
         serialNo: item.serialNo,
         status: item.status,
+        unitTraceCode: item.unitTraceCode,
+        boxTraceCode: item.boxTraceCode,
+        palletTraceCode: item.palletTraceCode,
         imageUrl
       };
     })
@@ -193,6 +236,11 @@ qrItemsRouter.post("/generate", async (request, response) => {
       pendingInbound: createdItems.length,
       inStock: 0,
       outbound: 0
+    },
+    hierarchySummary: {
+      unitCount: createdItems.length,
+      boxCount: createdItems.length,
+      palletCount: Math.ceil(createdItems.length / PALLET_SIZE)
     },
     items: itemsWithImages
   });
@@ -220,6 +268,9 @@ qrItemsRouter.get("/", async (request, response) => {
         ? {
             OR: [
               { qrCode: { contains: keyword } },
+              { unitTraceCode: { contains: keyword } },
+              { boxTraceCode: { contains: keyword } },
+              { palletTraceCode: { contains: keyword } },
               { productName: { contains: keyword } },
               { batch: { batchNo: { contains: keyword } } },
               { batch: { contract: { contractNo: { contains: keyword } } } }
@@ -260,6 +311,11 @@ qrItemsRouter.get("/", async (request, response) => {
         qrCode: item.qrCode,
         serialNo: item.serialNo,
         status: item.status,
+        unitTraceCode: item.unitTraceCode,
+        boxTraceCode: item.boxTraceCode,
+        palletTraceCode: item.palletTraceCode,
+        freezeReason: item.freezeReason,
+        statusRemark: item.statusRemark,
         productName: item.productName,
         currentWarehouse: item.currentWarehouse,
         createdAt: item.createdAt.toISOString(),
@@ -340,6 +396,11 @@ qrItemsRouter.get("/:id", async (request, response) => {
     currentWarehouse: qrItem.currentWarehouse,
     warehouseId: qrItem.warehouseId,
     locationId: qrItem.locationId,
+    unitTraceCode: qrItem.unitTraceCode,
+    boxTraceCode: qrItem.boxTraceCode,
+    palletTraceCode: qrItem.palletTraceCode,
+    freezeReason: qrItem.freezeReason,
+    statusRemark: qrItem.statusRemark,
     inboundAt: qrItem.inboundAt,
     outboundAt: qrItem.outboundAt,
     createdAt: qrItem.createdAt,

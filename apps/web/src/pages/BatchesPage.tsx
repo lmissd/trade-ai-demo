@@ -20,6 +20,12 @@ import { QrcodeOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { requestJson } from "../lib/api";
 
+type HierarchySummary = {
+  unitCount: number;
+  boxCount: number;
+  palletCount: number;
+};
+
 type BatchListRecord = {
   id: string;
   batchNo: string;
@@ -44,43 +50,23 @@ type BatchListRecord = {
     customerName: string;
     supplierName: string;
   };
-  qrItems: Array<{
-    id: string;
-    status: string;
-  }>;
   qrSummary: {
     total: number;
     pendingInbound: number;
     inStock: number;
     outbound: number;
   };
+  hierarchySummary: HierarchySummary;
 };
 
-type BatchDetail = {
-  id: string;
-  batchNo: string;
-  contractId: string;
+type BatchDetail = BatchListRecord & {
   skuId: string | null;
-  sku: string;
-  productName: string;
-  totalQuantity: number;
-  unit: string;
-  destinationWarehouse: string;
-  warehouseId: string | null;
-  status: string;
-  sourceDocumentId: string | null;
-  createdAt: string;
-  updatedAt: string;
   sourceDocument: {
     id: string;
     originalName: string | null;
     fileUrl: string | null;
   } | null;
-  contract: {
-    id: string;
-    contractNo: string;
-    customerName: string;
-    supplierName: string;
+  contract: BatchListRecord["contract"] & {
     amount: number;
     currency: string;
   };
@@ -90,6 +76,11 @@ type BatchDetail = {
     serialNo: number;
     status: string;
     createdAt: string;
+    unitTraceCode: string | null;
+    boxTraceCode: string | null;
+    palletTraceCode: string | null;
+    freezeReason: string | null;
+    statusRemark: string | null;
   }>;
   stockMovements: Array<{
     id: string;
@@ -99,12 +90,15 @@ type BatchDetail = {
     warehouseName: string | null;
     occurredAt: string;
   }>;
-  qrSummary: {
-    total: number;
-    pendingInbound: number;
-    inStock: number;
-    outbound: number;
-  };
+};
+
+const qrStatusColorMap: Record<string, string> = {
+  PENDING_INBOUND: "processing",
+  IN_STOCK: "success",
+  OUTBOUND: "default",
+  DAMAGED: "error",
+  LOST: "error",
+  FROZEN: "warning"
 };
 
 function formatDateTime(value?: string | null) {
@@ -124,7 +118,6 @@ export function BatchesPage() {
   const [selectedBatchDetail, setSelectedBatchDetail] = useState<BatchDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
-  const [generatingBatchId, setGeneratingBatchId] = useState<string | null>(null);
 
   const selectedBatch = useMemo(
     () => batches.find((item) => item.id === selectedBatchId) ?? null,
@@ -162,27 +155,6 @@ export function BatchesPage() {
       message.error(error instanceof Error ? error.message : "加载批次详情失败。");
     } finally {
       setIsDetailLoading(false);
-    }
-  }
-
-  async function handleGenerateQr(batchId: string) {
-    setGeneratingBatchId(batchId);
-
-    try {
-      const result = await requestJson<{ created: boolean; message: string }>("/api/qr-items/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ batchId })
-      });
-
-      message.success(result.created ? "本批次二维码已生成。" : "该批次已经生成过二维码。");
-      await Promise.all([loadBatches(), loadBatchDetail(batchId)]);
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "生成二维码失败。");
-    } finally {
-      setGeneratingBatchId(null);
     }
   }
 
@@ -234,11 +206,18 @@ export function BatchesPage() {
     {
       title: "二维码状态",
       key: "qrSummary",
-      width: 200,
+      width: 220,
       render: (_, record) =>
         record.qrSummary.total > 0
-          ? `总码 ${record.qrSummary.total} / 在库 ${record.qrSummary.inStock}`
+          ? `总码 ${record.qrSummary.total} / 在库 ${record.qrSummary.inStock} / 出库 ${record.qrSummary.outbound}`
           : "尚未生成二维码"
+    },
+    {
+      title: "多级码",
+      key: "hierarchySummary",
+      width: 220,
+      render: (_, record) =>
+        `箱码 ${record.hierarchySummary.boxCount} / 托盘码 ${record.hierarchySummary.palletCount}`
     },
     {
       title: "来源单据",
@@ -251,9 +230,10 @@ export function BatchesPage() {
   return (
     <div className="document-workspace">
       <section className="page-hero">
-        <h2>正式批次数据</h2>
+        <h2>批次追踪中心</h2>
         <p>
-          这里展示的是由正式合同生成的货物批次。当前阶段批次已经接入二维码、扫码入库 / 出库和真实库存统计，库存变化只来自二维码状态流转。
+          批次不是独立业务操作模块，而是贯穿合同、采购、物流、清关、仓储、销售和库存的追踪线索。
+          这里用于查看批次全链路状态，具体业务动作应回到对应模块执行。
         </p>
       </section>
 
@@ -276,8 +256,8 @@ export function BatchesPage() {
           <Alert
             type="info"
             showIcon
-            message="阶段 8 真实库存规则"
-            description="批次数量只是业务目标量，不等于当前库存。只有二维码状态从待入库变为在库、再从在库变为已出库后，库存统计才会变化。"
+            message="批次是追踪对象，不是独立处理岗位"
+            description="合同与单据生成批次；采购、物流、清关、仓储、销售引用批次推进业务；二维码追溯和库存统计按批次查询真实状态。批次数量仍是计划执行数量，库存只由 QrItem.status 与 StockMovement 计算。"
           />
         </Col>
       </Row>
@@ -299,7 +279,7 @@ export function BatchesPage() {
               columns={columns}
               dataSource={batches}
               pagination={{ pageSize: 6, hideOnSinglePage: true }}
-              scroll={{ x: 1200 }}
+              scroll={{ x: 1420 }}
               rowClassName={(record) => (record.id === selectedBatchId ? "documents-table-row-selected" : "")}
               onRow={(record) => ({
                 onClick: () => setSelectedBatchId(record.id)
@@ -329,16 +309,8 @@ export function BatchesPage() {
                       label: "批次数量",
                       children: `${selectedBatchDetail.totalQuantity}${selectedBatchDetail.unit}`
                     },
-                    {
-                      key: "warehouse",
-                      label: "目的仓库",
-                      children: selectedBatchDetail.destinationWarehouse
-                    },
-                    {
-                      key: "document",
-                      label: "来源单据",
-                      children: selectedBatchDetail.sourceDocument?.originalName ?? "-"
-                    }
+                    { key: "warehouse", label: "目的仓库", children: selectedBatchDetail.destinationWarehouse },
+                    { key: "document", label: "来源单据", children: selectedBatchDetail.sourceDocument?.originalName ?? "-" }
                   ]}
                 />
 
@@ -346,8 +318,23 @@ export function BatchesPage() {
                   type="info"
                   showIcon
                   message="当前二维码与库存状态"
-                  description={`已生成二维码 ${selectedBatchDetail.qrSummary.total} 个；在途 ${selectedBatchDetail.qrSummary.pendingInbound} 个；在库 ${selectedBatchDetail.qrSummary.inStock} 个；已出库 ${selectedBatchDetail.qrSummary.outbound} 个。`}
+                  description={`已生成二维码 ${selectedBatchDetail.qrSummary.total} 个；待入库 ${selectedBatchDetail.qrSummary.pendingInbound} 个；在库 ${selectedBatchDetail.qrSummary.inStock} 个；已出库 ${selectedBatchDetail.qrSummary.outbound} 个。`}
                 />
+
+                <div className="document-summary-grid warehouse-mini-grid">
+                  <Card className="stat-card">
+                    <Statistic title="最小包装码" value={selectedBatchDetail.hierarchySummary.unitCount} suffix="个" />
+                  </Card>
+                  <Card className="stat-card">
+                    <Statistic title="箱码" value={selectedBatchDetail.hierarchySummary.boxCount} suffix="个" />
+                  </Card>
+                  <Card className="stat-card">
+                    <Statistic title="托盘码" value={selectedBatchDetail.hierarchySummary.palletCount} suffix="个" />
+                  </Card>
+                  <Card className="stat-card">
+                    <Statistic title="库存流水" value={selectedBatchDetail.stockMovements.length} suffix="条" />
+                  </Card>
+                </div>
 
                 <Space wrap>
                   {selectedBatchDetail.qrSummary.total > 0 ? (
@@ -362,10 +349,9 @@ export function BatchesPage() {
                     <Button
                       type="primary"
                       icon={<QrcodeOutlined />}
-                      loading={generatingBatchId === selectedBatchDetail.id}
-                      onClick={() => void handleGenerateQr(selectedBatchDetail.id)}
+                      onClick={() => openBatchQrItems(selectedBatchDetail.id)}
                     >
-                      生成本批次二维码
+                      去二维码追溯生成二维码
                     </Button>
                   )}
                   <Button icon={<QrcodeOutlined />} onClick={() => navigate("/qr-items")}>
@@ -378,15 +364,23 @@ export function BatchesPage() {
                   <List
                     style={{ marginTop: 12 }}
                     bordered
-                    locale={{ emptyText: "当前批次还没有二维码，先点击“生成本批次二维码”。" }}
+                    locale={{ emptyText: "当前批次还没有二维码。请到“二维码追溯”选择该批次并生成二维码。" }}
                     dataSource={selectedBatchDetail.qrItems}
                     renderItem={(item) => (
                       <List.Item>
                         <div style={{ width: "100%" }}>
-                          <div>{item.qrCode}</div>
+                          <Space wrap>
+                            <strong>{item.qrCode}</strong>
+                            <Tag color={qrStatusColorMap[item.status] ?? "default"}>{item.status}</Tag>
+                          </Space>
                           <div className="documents-secondary-text">
-                            序号 {item.serialNo} · {item.status} · {formatDateTime(item.createdAt)}
+                            序号 {item.serialNo} · 箱码 {item.boxTraceCode ?? "-"} · 托盘码 {item.palletTraceCode ?? "-"}
                           </div>
+                          {item.freezeReason || item.statusRemark ? (
+                            <div className="documents-secondary-text">
+                              冻结/备注：{item.freezeReason ?? item.statusRemark}
+                            </div>
+                          ) : null}
                         </div>
                       </List.Item>
                     )}
@@ -398,14 +392,14 @@ export function BatchesPage() {
                   <List
                     style={{ marginTop: 12 }}
                     bordered
-                    locale={{ emptyText: "当前批次还没有库存流水，先去仓储管理完成扫码入库或扫码出库。" }}
+                    locale={{ emptyText: "当前批次还没有库存流水，请先去仓储管理完成扫码入库、出库或冻结解冻。" }}
                     dataSource={selectedBatchDetail.stockMovements}
                     renderItem={(item) => (
                       <List.Item>
                         <div style={{ width: "100%" }}>
                           <div>{item.movementType}</div>
                           <div className="documents-secondary-text">
-                            {item.fromStatus ?? "-"} → {item.toStatus ?? "-"} · {formatDateTime(item.occurredAt)}
+                            {item.fromStatus ?? "-"} {"->"} {item.toStatus ?? "-"} · {formatDateTime(item.occurredAt)}
                           </div>
                         </div>
                       </List.Item>
@@ -414,7 +408,7 @@ export function BatchesPage() {
                 </div>
               </Space>
             ) : (
-              <Empty description="从左侧选择一个批次后，这里会展示二维码准备状态和库存流水。" />
+              <Empty description="从左侧选择一个批次后，这里会展示二维码准备状态、多级码结构和库存流水。" />
             )}
           </Card>
         </Col>

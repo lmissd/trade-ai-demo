@@ -1,5 +1,5 @@
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Empty, Space, Statistic, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Card, Col, Empty, List, Row, Space, Statistic, Table, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 export type InventorySummaryResponse = {
@@ -24,6 +24,46 @@ export type InventorySummaryResponse = {
     statusAccountedQuantity: number;
     isConsistent: boolean;
   };
+  hierarchySummary: {
+    unitCount: number;
+    boxCount: number;
+    palletCount: number;
+  };
+  ageBuckets: Array<{
+    key: string;
+    label: string;
+    quantity: number;
+  }>;
+  locationUtilization: Array<{
+    locationId: string;
+    warehouseId: string | null;
+    locationCode: string;
+    zone: string | null;
+    capacity: number | null;
+    occupiedQuantity: number;
+    frozenQuantity: number;
+    availableCapacity: number | null;
+    utilizationPercent: number | null;
+  }>;
+  freezeReasons: Array<{
+    reason: string;
+    quantity: number;
+  }>;
+  stocktakes: Array<{
+    id: string;
+    stocktakeNo: string;
+    status: string;
+    batchId: string | null;
+    batchNo: string;
+    warehouseId: string | null;
+    warehouseName: string;
+    plannedQuantity: number;
+    actualQuantity: number;
+    differenceQuantity: number;
+    operatorName: string | null;
+    createdAt: string;
+    completedAt: string | null;
+  }>;
   byBatch: Array<{
     batchId: string;
     batchNo: string;
@@ -355,6 +395,90 @@ export function WarehouseInventorySection({
     }
   ];
 
+  const locationColumns: ColumnsType<InventorySummaryResponse["locationUtilization"][number]> = [
+    {
+      title: "库位",
+      dataIndex: "locationCode",
+      width: 160
+    },
+    {
+      title: "区域",
+      dataIndex: "zone",
+      width: 120,
+      render: (value: string | null) => value ?? "-"
+    },
+    {
+      title: "已占用",
+      dataIndex: "occupiedQuantity",
+      width: 100
+    },
+    {
+      title: "冻结",
+      dataIndex: "frozenQuantity",
+      width: 100
+    },
+    {
+      title: "容量",
+      dataIndex: "capacity",
+      width: 100,
+      render: (value: number | null) => value ?? "-"
+    },
+    {
+      title: "剩余容量",
+      dataIndex: "availableCapacity",
+      width: 120,
+      render: (value: number | null) => value ?? "-"
+    },
+    {
+      title: "占用率",
+      dataIndex: "utilizationPercent",
+      width: 120,
+      render: (value: number | null) => (value !== null ? `${value}%` : "-")
+    }
+  ];
+
+  const stocktakeColumns: ColumnsType<InventorySummaryResponse["stocktakes"][number]> = [
+    {
+      title: "盘点单号",
+      dataIndex: "stocktakeNo",
+      width: 180
+    },
+    {
+      title: "批次 / 仓库",
+      key: "batchWarehouse",
+      width: 220,
+      render: (_, record) => (
+        <div>
+          <div>{record.batchNo}</div>
+          <div className="documents-secondary-text">{record.warehouseName}</div>
+        </div>
+      )
+    },
+    {
+      title: "计划 / 实盘",
+      key: "quantities",
+      width: 140,
+      render: (_, record) => `${record.plannedQuantity} / ${record.actualQuantity}`
+    },
+    {
+      title: "差异",
+      dataIndex: "differenceQuantity",
+      width: 90
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 120,
+      render: (value: string) => <Tag color={value === "COMPLETED" ? "success" : "processing"}>{value}</Tag>
+    },
+    {
+      title: "完成时间",
+      dataIndex: "completedAt",
+      width: 180,
+      render: (value: string | null) => formatDateTime(value)
+    }
+  ];
+
   const summary = data?.summary ?? null;
 
   return (
@@ -412,6 +536,61 @@ export function WarehouseInventorySection({
             <Empty description="当前还没有可展示的库存汇总。" />
           )}
 
+          {data ? (
+            <div className="document-summary-grid warehouse-mini-grid">
+              <Card className="stat-card">
+                <Statistic title="最小包装码" value={data.hierarchySummary.unitCount} suffix="个" />
+              </Card>
+              <Card className="stat-card">
+                <Statistic title="箱码" value={data.hierarchySummary.boxCount} suffix="个" />
+              </Card>
+              <Card className="stat-card">
+                <Statistic title="托盘码" value={data.hierarchySummary.palletCount} suffix="个" />
+              </Card>
+              <Card className="stat-card">
+                <Statistic title="盘点任务" value={data.stocktakes.length} suffix="单" />
+              </Card>
+            </div>
+          ) : null}
+
+          {data ? (
+            <Row gutter={[16, 16]}>
+              <Col xs={24} xl={12}>
+                <Card size="small" className="placeholder-card" title="库龄分布">
+                  <List
+                    size="small"
+                    dataSource={data.ageBuckets}
+                    renderItem={(item) => (
+                      <List.Item>
+                        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                          <span>{item.label}</span>
+                          <strong>{item.quantity}</strong>
+                        </Space>
+                      </List.Item>
+                    )}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} xl={12}>
+                <Card size="small" className="placeholder-card" title="冻结原因统计">
+                  <List
+                    size="small"
+                    dataSource={data.freezeReasons}
+                    locale={{ emptyText: "当前没有冻结库存" }}
+                    renderItem={(item) => (
+                      <List.Item>
+                        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                          <span>{item.reason}</span>
+                          <strong>{item.quantity}</strong>
+                        </Space>
+                      </List.Item>
+                    )}
+                  />
+                </Card>
+              </Col>
+            </Row>
+          ) : null}
+
           <Tabs
             className="warehouse-inventory-tabs"
             items={[
@@ -464,6 +643,36 @@ export function WarehouseInventorySection({
                     }
                     locale={{ emptyText: "当前还没有可统计的仓库库存。" }}
                     scroll={{ x: 1080 }}
+                  />
+                )
+              },
+              {
+                key: "location",
+                label: `库位利用率 (${data?.locationUtilization.length ?? 0})`,
+                children: (
+                  <Table
+                    rowKey="locationId"
+                    size="small"
+                    pagination={{ pageSize: 6, hideOnSinglePage: true }}
+                    columns={locationColumns}
+                    dataSource={data?.locationUtilization ?? []}
+                    locale={{ emptyText: "当前还没有可统计的库位利用率数据。" }}
+                    scroll={{ x: 980 }}
+                  />
+                )
+              },
+              {
+                key: "stocktake",
+                label: `盘点记录 (${data?.stocktakes.length ?? 0})`,
+                children: (
+                  <Table
+                    rowKey="id"
+                    size="small"
+                    pagination={{ pageSize: 6, hideOnSinglePage: true }}
+                    columns={stocktakeColumns}
+                    dataSource={data?.stocktakes ?? []}
+                    locale={{ emptyText: "当前还没有盘点记录。" }}
+                    scroll={{ x: 980 }}
                   />
                 )
               }

@@ -72,6 +72,23 @@ enum QrItemStatus {
   FROZEN
 }
 
+enum WarehouseAnomalyMode {
+  INBOUND
+  OUTBOUND
+  INVENTORY
+}
+
+enum WarehouseAnomalyType {
+  WRONG_GOODS
+  MISSING_SCAN
+  EXTRA_SCAN
+  DAMAGED
+  SHORTAGE
+  OVERAGE
+  WRONG_BATCH
+  WRONG_TASK
+}
+
 enum StockMovementType {
   INBOUND
   OUTBOUND
@@ -447,6 +464,8 @@ model Contract {
   batches              Batch[]
   payments             Payment[]
   stockMovements       StockMovement[]
+  warehouseAnomalies   WarehouseAnomaly[]
+  stocktakeOrders      StocktakeOrder[]
 }
 
 model DocumentChangeLog {
@@ -497,6 +516,8 @@ model Batch {
   sourceDocument       Document?       @relation(fields: [sourceDocumentId], references: [id])
   qrItems              QrItem[]
   stockMovements       StockMovement[]
+  warehouseAnomalies   WarehouseAnomaly[]
+  stocktakeOrders      StocktakeOrder[]
 }
 
 model QrItem {
@@ -511,12 +532,18 @@ model QrItem {
   currentWarehouse String?
   warehouseId      String?
   locationId       String?
+  unitTraceCode    String?
+  boxTraceCode     String?
+  palletTraceCode  String?
+  freezeReason     String?
+  statusRemark     String?
   inboundAt        DateTime?
   outboundAt       DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   batch            Batch           @relation(fields: [batchId], references: [id])
   stockMovements   StockMovement[]
+  stocktakeItems   StocktakeItem[]
 
   @@unique([batchId, serialNo])
 }
@@ -561,28 +588,41 @@ model InventorySnapshot {
 }
 
 model StocktakeOrder {
-  id           String    @id @default(cuid())
-  stocktakeNo  String    @unique
-  warehouseId  String?
-  status       String    @default("PENDING")
-  operatorId   String?
-  operatorName String?
-  startedAt    DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                 String          @id @default(cuid())
+  stocktakeNo        String          @unique
+  warehouseId        String?
+  batchId            String?
+  contractId         String?
+  status             String          @default("PENDING")
+  operatorId         String?
+  operatorName       String?
+  plannedQuantity    Int             @default(0)
+  actualQuantity     Int             @default(0)
+  differenceQuantity Int             @default(0)
+  note               String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  batch              Batch?          @relation(fields: [batchId], references: [id])
+  contract           Contract?       @relation(fields: [contractId], references: [id])
+  items              StocktakeItem[]
 }
 
 model StocktakeItem {
-  id               String   @id @default(cuid())
-  stocktakeOrderId String
-  qrItemId         String?
-  skuId            String?
-  systemStatus     String?
-  actualStatus     String?
-  differenceType   String?
-  remark           String?
-  createdAt        DateTime @default(now())
+  id                 String         @id @default(cuid())
+  stocktakeOrderId   String
+  qrItemId           String?
+  skuId              String?
+  systemStatus       String?
+  actualStatus       String?
+  differenceType     String?
+  systemLocationCode String?
+  actualLocationCode String?
+  remark             String?
+  createdAt          DateTime       @default(now())
+  stocktakeOrder     StocktakeOrder @relation(fields: [stocktakeOrderId], references: [id])
+  qrItem             QrItem?        @relation(fields: [qrItemId], references: [id])
 }
 
 model PurchaseOrder {
@@ -670,7 +710,12 @@ model PreReceiveOrder {
   contractId          String?
   batchId             String?
   warehouseId         String?
+  appointmentNo       String?
+  appointmentTime     DateTime?
   expectedArrivalTime DateTime?
+  waveNo              String?
+  dockNo              String?
+  arrivalStatus       String    @default("SCHEDULED")
   skuName             String
   quantity            Int
   unit                String
@@ -700,11 +745,45 @@ model OutboundOrder {
   contractId   String?
   batchId      String?
   warehouseId  String?
+  waveNo       String?
+  pickupListNo String?
+  reviewStatus String   @default("PENDING")
+  firstReviewerName String?
+  firstReviewedAt   DateTime?
+  secondReviewerName String?
+  secondReviewedAt   DateTime?
+  pickingStatus     String   @default("READY")
   quantity     Int
   unit         String
   status       String   @default("PENDING")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model WarehouseAnomaly {
+  id             String               @id @default(cuid())
+  anomalyNo      String               @unique
+  mode           WarehouseAnomalyMode
+  anomalyType    WarehouseAnomalyType
+  batchId        String?
+  contractId     String?
+  warehouseId    String?
+  relatedOrderId String?
+  relatedOrderNo String?
+  qrCode         String?
+  quantity       Int                  @default(1)
+  description    String?
+  status         String               @default("OPEN")
+  reportedById   String?
+  reportedByName String?
+  handledById    String?
+  handledByName  String?
+  reportedAt     DateTime             @default(now())
+  handledAt      DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  batch          Batch?               @relation(fields: [batchId], references: [id])
+  contract       Contract?            @relation(fields: [contractId], references: [id])
 }
 
 model SalesOrder {

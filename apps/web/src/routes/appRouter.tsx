@@ -15,6 +15,7 @@ import { ProcurementPage } from "../pages/ProcurementPage";
 import { QrItemsPage } from "../pages/QrItemsPage";
 import { ReportsPage } from "../pages/ReportsPage";
 import { SalesPage } from "../pages/SalesPage";
+import { TestMaterialsPage } from "../pages/TestMaterialsPage";
 import { WarehousePage } from "../pages/WarehousePage";
 import { WorkOrdersPage } from "../pages/WorkOrdersPage";
 
@@ -90,6 +91,10 @@ export const appRouter = createBrowserRouter([
       {
         path: "/qr-items",
         element: <QrItemsPage />
+      },
+      {
+        path: "/materials",
+        element: <TestMaterialsPage />
       },
       {
         path: "/ai-assistant",

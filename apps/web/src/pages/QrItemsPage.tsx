@@ -34,6 +34,11 @@ type BatchOption = {
     inStock: number;
     outbound: number;
   };
+  hierarchySummary?: {
+    unitCount: number;
+    boxCount: number;
+    palletCount: number;
+  };
 };
 
 type QrItemListRecord = {
@@ -41,6 +46,11 @@ type QrItemListRecord = {
   qrCode: string;
   serialNo: number;
   status: string;
+  unitTraceCode: string | null;
+  boxTraceCode: string | null;
+  palletTraceCode: string | null;
+  freezeReason: string | null;
+  statusRemark: string | null;
   productName: string | null;
   currentWarehouse: string | null;
   createdAt: string;
@@ -62,29 +72,12 @@ type QrItemListRecord = {
   } | null;
 };
 
-type QrItemDetail = {
-  id: string;
-  qrCode: string;
-  serialNo: number;
-  status: string;
-  productName: string | null;
-  currentWarehouse: string | null;
+type QrItemDetail = QrItemListRecord & {
   warehouseId: string | null;
   locationId: string | null;
   inboundAt: string | null;
   outboundAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  imageUrl: string;
   imageFilePath: string;
-  batch: {
-    id: string;
-    batchNo: string;
-    status: string;
-    totalQuantity: number;
-    unit: string;
-    destinationWarehouse: string;
-  };
   contract: {
     id: string;
     contractNo: string;
@@ -140,7 +133,7 @@ export function QrItemsPage() {
   const [batches, setBatches] = useState<BatchOption[]>([]);
   const [qrItems, setQrItems] = useState<QrItemListRecord[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<string | undefined>(initialBatchId);
-  const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
+  const [selectedStatus, setSelectedStatus] = useState("ALL");
   const [keyword, setKeyword] = useState("");
   const [selectedQrItemId, setSelectedQrItemId] = useState<string | null>(null);
   const [selectedQrItemDetail, setSelectedQrItemDetail] = useState<QrItemDetail | null>(null);
@@ -160,6 +153,7 @@ export function QrItemsPage() {
   const inStockCount = qrItems.filter((item) => item.status === "IN_STOCK").length;
   const pendingInboundCount = qrItems.filter((item) => item.status === "PENDING_INBOUND").length;
   const outboundCount = qrItems.filter((item) => item.status === "OUTBOUND").length;
+  const frozenCount = qrItems.filter((item) => item.status === "FROZEN").length;
 
   async function loadBatches() {
     setIsBatchesLoading(true);
@@ -195,18 +189,18 @@ export function QrItemsPage() {
         return;
       }
 
-      const searchParams = new URLSearchParams();
-      searchParams.set("batchId", selectedBatchId);
+      const nextSearchParams = new URLSearchParams();
+      nextSearchParams.set("batchId", selectedBatchId);
 
       if (selectedStatus !== "ALL") {
-        searchParams.set("status", selectedStatus);
+        nextSearchParams.set("status", selectedStatus);
       }
 
       if (keyword.trim()) {
-        searchParams.set("keyword", keyword.trim());
+        nextSearchParams.set("keyword", keyword.trim());
       }
 
-      const path = `/api/qr-items${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+      const path = `/api/qr-items?${nextSearchParams.toString()}`;
       const items = await requestJson<QrItemListRecord[]>(path);
 
       if (requestId !== qrItemsRequestIdRef.current) {
@@ -329,7 +323,7 @@ export function QrItemsPage() {
     {
       title: "二维码编号",
       dataIndex: "qrCode",
-      width: 260
+      width: 220
     },
     {
       title: "批次号",
@@ -338,27 +332,37 @@ export function QrItemsPage() {
       render: (_, record) => record.batch.batchNo
     },
     {
-      title: "关联合同",
-      key: "contractNo",
-      width: 180,
-      render: (_, record) => record.contract?.contractNo ?? "-"
-    },
-    {
       title: "序号",
       dataIndex: "serialNo",
-      width: 100
+      width: 90
     },
     {
       title: "状态",
       dataIndex: "status",
-      width: 140,
+      width: 130,
       render: (value: string) => <Tag color={qrStatusColorMap[value] ?? "default"}>{value}</Tag>
+    },
+    {
+      title: "箱码 / 托盘码",
+      key: "hierarchy",
+      width: 280,
+      render: (_, record) => (
+        <div>
+          <div>{record.boxTraceCode ?? "-"}</div>
+          <div className="documents-secondary-text">{record.palletTraceCode ?? "-"}</div>
+        </div>
+      )
     },
     {
       title: "仓库",
       dataIndex: "currentWarehouse",
-      width: 180,
+      width: 160,
       render: (value: string | null) => value ?? "-"
+    },
+    {
+      title: "冻结 / 备注",
+      key: "remark",
+      render: (_, record) => record.freezeReason ?? record.statusRemark ?? "-"
     }
   ];
 
@@ -367,7 +371,7 @@ export function QrItemsPage() {
       <section className="page-hero">
         <h2>二维码追溯</h2>
         <p>
-          这里是阶段 5 的核心页面。它默认进入最新批次的追溯视角，负责生成真实二维码、展示单个二维码生命周期，并为阶段 6 的扫码入库和阶段 8 的库存统计提供真实数据基础。
+          这里展示真实生成的货物二维码及生命周期。阶段 23 已补充最小包装码、箱码、托盘码的关联展示，并继续保持“二维码状态 + 库存流水”作为库存真相。
         </p>
       </section>
 
@@ -384,7 +388,7 @@ export function QrItemsPage() {
         </Col>
         <Col xs={24} xl={6}>
           <Card className="stat-card">
-            <Statistic title="在库" value={inStockCount} suffix="个" />
+            <Statistic title="在库 / 冻结" value={`${inStockCount} / ${frozenCount}`} />
           </Card>
         </Col>
         <Col xs={24} xl={6}>
@@ -398,8 +402,8 @@ export function QrItemsPage() {
         style={{ marginTop: 20 }}
         type="info"
         showIcon
-        message="阶段 5 规则"
-        description="本阶段只生成 QrItem 和二维码图片，不会增加库存。只有后续扫码入库把状态从 PENDING_INBOUND 变为 IN_STOCK 后，库存才会真正增加。"
+        message="二维码只代表货物身份"
+        description="同一箱货只贴一个唯一货物二维码。入库还是出库由当前页面、当前任务和当前工单决定。冻结、解冻、入库、出库都会形成状态变化和库存流水。"
       />
 
       <Card className="placeholder-card" style={{ marginTop: 20 }}>
@@ -436,7 +440,7 @@ export function QrItemsPage() {
               <Typography.Text strong>关键字</Typography.Text>
               <Input
                 value={keyword}
-                placeholder="搜二维码编号 / 批次号 / 合同号"
+                placeholder="搜二维码 / 箱码 / 托盘码 / 批次号 / 合同号"
                 onChange={(event) => setKeyword(event.target.value)}
               />
             </Space>
@@ -473,6 +477,13 @@ export function QrItemsPage() {
                     selectedBatch.qrSummary.total > 0
                       ? `已生成 ${selectedBatch.qrSummary.total} 个二维码`
                       : "尚未生成二维码"
+                },
+                {
+                  key: "hierarchySummary",
+                  label: "多级码结构",
+                  children: selectedBatch.hierarchySummary
+                    ? `最小包装码 ${selectedBatch.hierarchySummary.unitCount} 个，箱码 ${selectedBatch.hierarchySummary.boxCount} 个，托盘码 ${selectedBatch.hierarchySummary.palletCount} 个`
+                    : "-"
                 }
               ]}
             />
@@ -505,15 +516,13 @@ export function QrItemsPage() {
               columns={columns}
               dataSource={qrItems}
               pagination={{ pageSize: 8, hideOnSinglePage: true }}
-              scroll={{ x: 1100 }}
+              scroll={{ x: 1180 }}
               rowClassName={(record) => (record.id === selectedQrItemId ? "documents-table-row-selected" : "")}
               onRow={(record) => ({
                 onClick: () => setSelectedQrItemId(record.id)
               })}
               locale={{
-                emptyText: (
-                  <Empty description="当前条件下还没有二维码。请先选择批次并点击“生成本批次二维码”。" />
-                )
+                emptyText: <Empty description="当前条件下还没有二维码。请先选择批次并点击“生成本批次二维码”。" />
               }}
             />
           </Card>
@@ -529,12 +538,21 @@ export function QrItemsPage() {
                   column={1}
                   items={[
                     { key: "qrCode", label: "二维码编号", children: selectedQrItemDetail.qrCode },
+                    { key: "unitTraceCode", label: "最小包装码", children: selectedQrItemDetail.unitTraceCode ?? "-" },
+                    { key: "boxTraceCode", label: "箱码", children: selectedQrItemDetail.boxTraceCode ?? "-" },
+                    { key: "palletTraceCode", label: "托盘码", children: selectedQrItemDetail.palletTraceCode ?? "-" },
                     { key: "serialNo", label: "序号", children: selectedQrItemDetail.serialNo },
                     {
                       key: "status",
                       label: "当前状态",
-                      children: <Tag color={qrStatusColorMap[selectedQrItemDetail.status] ?? "default"}>{selectedQrItemDetail.status}</Tag>
+                      children: (
+                        <Tag color={qrStatusColorMap[selectedQrItemDetail.status] ?? "default"}>
+                          {selectedQrItemDetail.status}
+                        </Tag>
+                      )
                     },
+                    { key: "freezeReason", label: "冻结原因", children: selectedQrItemDetail.freezeReason ?? "-" },
+                    { key: "statusRemark", label: "状态备注", children: selectedQrItemDetail.statusRemark ?? "-" },
                     { key: "batchNo", label: "批次号", children: selectedQrItemDetail.batch.batchNo },
                     { key: "contractNo", label: "合同号", children: selectedQrItemDetail.contract?.contractNo ?? "-" },
                     { key: "product", label: "商品", children: selectedQrItemDetail.productName ?? "-" },
@@ -577,7 +595,7 @@ export function QrItemsPage() {
                         {
                           title: "状态变化",
                           key: "statusFlow",
-                          render: (_, record) => `${record.fromStatus ?? "-"} → ${record.toStatus ?? "-"}`
+                          render: (_, record) => `${record.fromStatus ?? "-"} -> ${record.toStatus ?? "-"}`
                         },
                         {
                           title: "时间",
@@ -593,13 +611,13 @@ export function QrItemsPage() {
                       type="warning"
                       showIcon
                       message="当前还没有库存流水"
-                      description="这是正常现象。阶段 5 只生成二维码，阶段 6 扫码入库后这里才会开始出现生命周期流水。"
+                      description="这是正常现象。只生成二维码不会形成库存，扫码入库、扫码出库、冻结或解冻后这里才会出现生命周期流水。"
                     />
                   )}
                 </div>
               </Space>
             ) : (
-              <Empty description="从左侧选择一个二维码后，这里会展示二维码图片和生命周期明细。" />
+              <Empty description="从左侧选择一个二维码后，这里会展示二维码图片、多级码结构和生命周期明细。" />
             )}
           </Card>
         </Col>
